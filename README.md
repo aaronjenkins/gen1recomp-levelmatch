@@ -30,7 +30,7 @@ Numbers come from the official Crystal Clear docs (`ShockSlayer/ccdocs`):
 | Gyms, E4, champion, rivals, Red | ~Lv7 at 0 badges to ~Lv75 at 15 | CC docs, "Scaling Gyms" |
 | Overworld trainers | scale too, "but not as harshly" | CC docs, "Overworld Trainers" |
 | Sidequest trainers (`SAGE`, `MYSTICALMAN`) | never scale | CC docs names Sprout Tower, Eusine |
-| Wild encounters | never scale | CC FAQ: "an intentional design choice" |
+| Wild encounters | **scale (departure from CC)** | see below |
 
 CC's gym teams are hand-authored per badge count and it publishes no formula, so
 the per-badge coefficients are mod options rather than constants.
@@ -38,6 +38,22 @@ the per-badge coefficients are mod options rather than constants.
 Rather than assigning every mon the target level — which would flatten a team
 into a mono-level wall — the mod anchors the *strongest* mon to the curve and
 shifts the rest by the same delta, preserving the authored spread.
+
+### Wild encounters — a deliberate departure
+
+Crystal Clear freezes wild levels on purpose ("Wild data does not scale. This is
+an intentional design choice"). This mod scales them anyway, by request. Set
+`scale_wilds` off to get CC's behaviour back.
+
+Default mode is **raise only**: the curve acts as a floor, so each area keeps its
+own character — Route 29 stays gentler than Victory Road — and only levels the
+curve has outgrown get lifted. `replace` flattens every route to one level.
+
+The Bug Catching Contest is excluded: it is scored on the levels it hands out, so
+rescaling would rewrite the minigame rather than the world.
+
+Grass/water/cave and fishing are separate hooks (`encounter.species` and
+`encounter.fishing`); both are wrapped.
 
 ### Team padding
 
@@ -56,6 +72,10 @@ six at 16, cloning entries from the authored roster so padding stays on-type.
 | `overworld_per_badge` | 30 | tenths of a level per badge (3.0) |
 | `pad_boss_teams` | on | grow thin boss teams |
 | `boss_full_team` | 6 | boss team size at 16 badges |
+| `scale_wilds` | on | scale wild encounters (off = CC-exact) |
+| `wild_mode` | raise_only | `raise_only` floors levels, `replace` flattens |
+| `wild_base` | 5 | wild level at 0 badges |
+| `wild_per_badge` | 30 | tenths of a level per badge (3.0) |
 | `debug_badges` | -1 | pretend this many badges; -1 reads the save |
 
 `debug_badges` exists because a fresh file has zero badges, where the curve is
@@ -72,6 +92,14 @@ Driven through the engine's own `POKEPORT_DRIVER` seam against the real dataset:
  0 badges  WHITNEY    L18/L20  -> L5/L7        (scaled DOWN -- fight her first)
 15 badges  YOUNGSTER  L4       -> L52          (softer overworld curve)
  any       SAGE       L3 x3    -> unchanged    (exempt)
+
+ 0 badges  Route 29 SENTRET   L3  -> L5
+ 8 badges  Route 29 SENTRET   L3  -> L29
+16 badges  Route 29 SENTRET   L3  -> L53
+ 8 badges  Victory Rd GOLBAT  L42 -> L42   (raise-only keeps area character)
+16 badges  Victory Rd GOLBAT  L42 -> L53
+ any       Bug Contest WEEDLE L9  -> L9    (excluded)
+ 8 badges  fishing MAGIKARP   L10 -> L29
 ```
 
 ## Known gaps
@@ -82,9 +110,11 @@ Driven through the engine's own `POKEPORT_DRIVER` seam against the real dataset:
   difficulty gap.
 - **Padding repeats species.** Falkner at 15 badges is three Pidgey and three
   Pidgeotto. Intentional (padding stays on-type) but visibly repetitive.
-- **Static legendaries are not scaled.** CC scales the birds, Snorlax, Lapras,
-  Sudowoodo, Celebi and Red Gyarados as `Lv5 + 5 x badges` capped at 50. Those
-  are wild-path encounters, not `trainer.party`, so they need a different seam.
+- **Static legendaries follow the general wild curve**, not CC's own
+  `Lv5 + 5 x badges` capped at 50. Close in practice (base 5, 3.0/badge), but not
+  CC's exact numbers, and uncapped.
+- **Roaming legendaries are unverified.** Raikou/Entei/Suicune may reach battle
+  by a path that does not pass through `encounter.species`.
 - **Gen 1 is not targeted.** The manifest declares `gen2`, which the engine
   expands to gold/silver/crystal.
 

@@ -10,8 +10,11 @@
 --   * gym teams run ~Lv7 at 0 badges to ~Lv75 at 15
 --   * overworld trainers scale as well, "but not as harshly as Gym trainers"
 --   * certain sidequest trainers (Eusine, Sprout Tower) never scale
---   * wild encounters never scale -- an intentional design choice, so this
---     mod does not touch them
+--   * wild encounters never scale -- an intentional design choice
+--
+-- Wild scaling is the one place this mod deliberately DEPARTS from Crystal
+-- Clear: CC freezes wild levels on purpose and we scale them anyway, on
+-- request.  It is opt-out via the `scale_wilds` option.
 --
 -- CC's gym teams are hand-authored per badge count and it publishes no
 -- formula, so the per-badge coefficients are options rather than constants.
@@ -56,6 +59,18 @@ return function(mod)
       default = true },
     { key = "boss_full_team", type = "number", label = "BOSS TEAM AT 16",
       default = 6, min = 1, max = 6 },
+    { key = "scale_wilds", type = "toggle", label = "SCALE WILDS",
+      default = true },
+    -- RAISE ONLY keeps each area's own character -- Route 29 stays gentler
+    -- than Victory Road -- and only lifts anything the curve has outgrown.
+    -- REPLACE flattens every route to one level.
+    { key = "wild_mode", type = "choice", label = "WILD MODE",
+      default = "raise_only",
+      choices = { { "RAISE ONLY", "raise_only" }, { "REPLACE", "replace" } } },
+    { key = "wild_base", type = "number", label = "WILD BASE LV",
+      default = 5, min = 2, max = 50 },
+    { key = "wild_per_badge", type = "number", label = "WILD LV/BADGE x10",
+      default = 30, min = 0, max = 99 },
     -- -1 reads the save.  Any other value pretends that many badges, which is
     -- the only way to feel the curve on a fresh file.
     { key = "debug_badges", type = "number", label = "TEST BADGES (-1 OFF)",
@@ -100,6 +115,16 @@ return function(mod)
     end
     local level = base + (perTenths / 10) * badges
     return math.max(2, math.min(MAX_LEVEL, math.floor(level + 0.5)))
+  end
+
+  -- The wild curve is its own pair of coefficients: wilds sit a little under
+  -- the overworld-trainer line so routes stay survivable.
+  local function wildLevel(current, badges)
+    local level = optionNumber("wild_base", 5)
+      + (optionNumber("wild_per_badge", 30) / 10) * badges
+    level = math.max(2, math.min(MAX_LEVEL, math.floor(level + 0.5)))
+    if mod.options:get("wild_mode") == "replace" then return level end
+    return math.max(tonumber(current) or 1, level)
   end
 
   -- Vanilla bosses carry authored teams as small as two (Falkner), which stay
@@ -179,5 +204,32 @@ return function(mod)
     return result
   end)
 
-  mod.log:info("level_match ready -- badge-count scaling on trainer.party")
+  -- Grass, water and cave rolls.  The engine hands over { species, level } and
+  -- keeps whatever comes back (src/world/gen2/World.lua rollEncounter).
+  mod.hooks:wrap("encounter.species", function(nextFn, enc, ctx)
+    local out = nextFn() or enc
+    if not mod.options:get("enabled") then return out end
+    if not mod.options:get("scale_wilds") then return out end
+    if type(out) ~= "table" or out.level == nil then return out end
+    -- The Bug Catching Contest is scored on the levels it hands out, so
+    -- rescaling its mons would rewrite the minigame rather than the world.
+    if ctx and ctx.kind == "contest" then return out end
+    out.level = wildLevel(out.level, badgeCount())
+    return out
+  end)
+
+  -- Fishing rolls come down a separate chain and are turned into a mon
+  -- immediately after, so the level has to be right here.
+  mod.hooks:wrap("encounter.fishing", function(nextFn, ...)
+    local roll = nextFn()
+    if not mod.options:get("enabled") then return roll end
+    if not mod.options:get("scale_wilds") then return roll end
+    if type(roll) ~= "table" or roll.species == nil or roll.level == nil then
+      return roll
+    end
+    roll.level = wildLevel(roll.level, badgeCount())
+    return roll
+  end)
+
+  mod.log:info("level_match ready -- trainer.party + wild encounter scaling")
 end
