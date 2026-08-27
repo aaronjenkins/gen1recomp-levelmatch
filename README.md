@@ -126,20 +126,36 @@ Driven through the engine's own `POKEPORT_DRIVER` seam against the real dataset:
 
 ## Install
 
-Grab `level_match-vX.Y.Z.zip` from the
-[latest release](https://github.com/aaronjenkins/gen1recomp-levelmatch/releases/latest)
-and unzip it into your Gen1Recomp `mods/` directory:
+Download `level_match-vX.Y.Z.zip` from the
+[latest release](https://github.com/aaronjenkins/gen1recomp-levelmatch/releases/latest),
+then import it the way Gen1Recomp imports any mod:
 
-| Install | mods/ location |
-|---|---|
-| macOS | `~/Library/Application Support/pokemon-love2d/mods/` |
-| Portable (e.g. Steam Deck SD card) | `<portable folder>/mods/` |
-| Linux | `~/.local/share/pokemon-love2d/mods/` |
+- **drag the `.zip` onto the game window**, or
+- open the launcher's mod manager and import the `.zip` from there.
 
-The zip contains `level_match/` at its root, so it unzips straight in.
+The engine validates the archive, then installs it to `mods/level_match/` — it
+takes the folder name from the manifest id, so the install is named correctly
+however the archive was built.
 
 Requires engine **0.2.x** (verified on 0.2.26). On 0.1.x the manifest's `gen2`
-target expands to Gold only and Crystal is not a known game at all.
+target expands to Gold only, and Crystal is not a known game at all.
+
+### Updates
+
+The manifest declares its `github` repository, so the mod manager's update check
+sees new releases here and can install them in place. Only published release
+assets count — a GitHub source archive has the wrong layout and is never used.
+
+### Manual install
+
+If you would rather not use the importer, unzip the archive straight into the
+`mods/` directory of your install — it contains `level_match/` at its root:
+
+| Install | `mods/` location |
+|---|---|
+| macOS | `~/Library/Application Support/pokemon-love2d/mods/` |
+| Linux | `~/.local/share/pokemon-love2d/mods/` |
+| Portable | `<portable folder>/mods/` |
 
 ### Development install (from a checkout)
 
