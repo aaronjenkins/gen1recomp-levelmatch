@@ -126,9 +126,33 @@ Driven through the engine's own `POKEPORT_DRIVER` seam against the real dataset:
 
 ## Install
 
+Grab `level_match-vX.Y.Z.zip` from the
+[latest release](https://github.com/aaronjenkins/gen1recomp-levelmatch/releases/latest)
+and unzip it into your Gen1Recomp `mods/` directory:
+
+| Install | mods/ location |
+|---|---|
+| macOS | `~/Library/Application Support/pokemon-love2d/mods/` |
+| Portable (e.g. Steam Deck SD card) | `<portable folder>/mods/` |
+| Linux | `~/.local/share/pokemon-love2d/mods/` |
+
+The zip contains `level_match/` at its root, so it unzips straight in.
+
+Requires engine **0.2.x** (verified on 0.2.26). On 0.1.x the manifest's `gen2`
+target expands to Gold only and Crystal is not a known game at all.
+
+### Development install (from a checkout)
+
 ```
 ./install-levelmatch/install-levelmatch.sh
 ```
 
 Copies the mod into the engine's data directory, snapshotting `saves/` first.
 macOS paths; adjust for other platforms.
+
+## Releases
+
+Tagging `vX.Y.Z` builds and publishes a release automatically
+(`.github/workflows/release.yml`). The workflow refuses the tag if it disagrees
+with the `version` in `manifest.json`, since the mod manager shows the manifest
+version rather than the tag.

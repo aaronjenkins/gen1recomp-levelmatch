@@ -1,0 +1,50 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A release whose zip disagrees with the manifest inside it is worse than
+      # no release: the mod manager shows the manifest version, not the tag.
+      - name: Tag must match manifest version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest="$(python3 -c 'import json,sys; print(json.load(open("code/level_match/manifest.json"))["version"])')"
+          echo "tag=$tag manifest=$manifest"
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::tag $tag does not match manifest version $manifest"
+            exit 1
+          fi
+
+      - name: Lint Lua
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq lua5.4 >/dev/null
+          luac5.4 -p code/level_match/main.lua
+          python3 -c 'import json; json.load(open("code/level_match/manifest.json"))'
+
+      # The zip holds level_match/ at its root so it unzips straight into the
+      # engine's mods/ directory.
+      - name: Package mod
+        run: |
+          mkdir -p dist build
+          cp -R code/level_match build/level_match
+          (cd build && zip -qr "../dist/level_match-${GITHUB_REF_NAME}.zip" level_match)
+          ls -l dist
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "level_match ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            dist/*.zip
