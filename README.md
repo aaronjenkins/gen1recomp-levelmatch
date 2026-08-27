@@ -182,9 +182,12 @@ untouched mid-challenge, sidequest classes freeze only when `exempt_sidequest` i
 on, and grass, cave and fishing rolls all scale. Each
 published zip is checked against the importer's archive rules.
 
-**What was not verified.** Nobody has played a full game with this — there is no
-playthrough behind it and no balance testing across a real run. Treat the defaults
-as a starting point, and back up your saves before installing.
+**Played once, not played through.** A scaled gym battle has been fought in the
+real game and ran correctly — the padded team, the rebuilt movesets and the
+levels all behaved, and it was genuinely harder. That is one battle, not a run:
+there is still no full playthrough and no balance testing across one, so the
+curve past the mid-game is still a projection. Treat the defaults as a starting
+point, and back up your saves before installing.
 
 ## License
 
