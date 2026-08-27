@@ -45,7 +45,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "level_match ${GITHUB_REF_NAME}" \
-            --generate-notes \
-            dist/*.zip
+          # Re-pushing a tag (a history rewrite moves them) re-runs this job.
+          # `gh release create` hard-fails on an existing tag, so update in
+          # place instead of turning a routine re-tag into a red build.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME exists -- refreshing its asset"
+            gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "level_match ${GITHUB_REF_NAME}" \
+              --generate-notes \
+              dist/*.zip
+          fi
