@@ -2,111 +2,96 @@
 
 Crystal Clear style badge-count enemy scaling for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp), as a Gen 2 mod.
 
-Crystal Clear's open world works because of one rule: every trainer scales to
-your badge count, so all 16 gyms can be faced in any order. This mod brings that
-rule to vanilla Gold/Silver/Crystal.
+Crystal Clear's open world works because of one rule: every trainer scales to your
+badge count, so all 16 gyms can be faced in any order. This mod brings that rule
+to vanilla Gold/Silver/Crystal.
 
-## Status
+Requires engine **0.2.x** (developed against 0.2.26). On 0.1.x the `gen2` target
+expands to Gold only and Crystal is not a known game at all.
 
-Working. Requires engine **0.2.x**; developed and verified against 0.2.26,
-exercised against the real Crystal dataset through the engine's own
-`POKEPORT_DRIVER` seam.
+## Install
 
-## How it works
+Download `level_match-vX.Y.Z.zip` from the
+[latest release](https://github.com/aaronjenkins/gen1recomp-levelmatch/releases/latest),
+then import it as Gen1Recomp imports any mod: **drag the `.zip` onto the game
+window**, or import it from the launcher's mod manager. The engine validates the
+archive and installs it to `mods/level_match/`, taking the folder name from the
+manifest id.
 
-The engine exposes a `trainer.party` hook (`src/battle/gen2/Battle.lua`) that
-hands a mod the composed enemy roster and keeps whatever it hands back. The mod
-wraps it, reads the badge count off the save, and rewrites levels.
+The manifest declares its `github` repository, so the mod manager's update check
+finds new releases here. Only published release assets count — a GitHub source
+archive has the wrong layout and is never used.
 
-`trainer.party` is engine-native, so this mod has no dependency on any other
-mod.
+To install by hand instead, unzip it into your `mods/` directory (the archive has
+`level_match/` at its root): `~/Library/Application Support/pokemon-love2d/mods/`
+on macOS, `~/.local/share/pokemon-love2d/mods/` on Linux, `<portable folder>/mods/`
+for a portable install.
 
-### The curve
+Options live in-game under **START → MODS → Level Match → OPTIONS..**, and apply
+to the next battle without a restart.
 
-Numbers come from the official Crystal Clear docs (`ShockSlayer/ccdocs`):
+## What it does
+
+The engine's `trainer.party` hook (`src/battle/gen2/Battle.lua`) hands a mod the
+composed enemy roster and keeps whatever it hands back. The mod wraps that, reads
+badge count off the save, and rewrites the team. It is engine-native, so the mod
+depends on no other mod.
 
 | Tier | Behaviour | Source |
 |---|---|---|
 | Gyms, E4, champion, rivals, Red | ~Lv7 at 0 badges to ~Lv75 at 15 | CC docs, "Scaling Gyms" |
-| Overworld trainers | scale too, "but not as harshly" (toggle: `scale_overworld`) | CC docs, "Overworld Trainers" |
-| Sidequest trainers (`SAGE`, `MYSTICALMAN`) | never scale | CC docs names Sprout Tower, Eusine |
-| Wild encounters | **scale (departure from CC)** | see below |
-| Battle Tower | never scales | see below |
+| Overworld trainers | scale too, "but not as harshly" | CC docs, "Overworld Trainers" |
+| Sidequest trainers (`SAGE`, `MYSTICALMAN`) | never scale | CC names Sprout Tower, Eusine |
+| Wild encounters | scale — **a departure from CC** | below |
+| Battle Tower | never scales | below |
 
-CC's gym teams are hand-authored per badge count and it publishes no formula, so
-the per-badge coefficients are mod options rather than constants.
+CC hand-authors its gym teams per badge count and publishes no formula, so the
+per-badge coefficients are options rather than constants.
 
-Rather than assigning every mon the target level — which would flatten a team
-into a mono-level wall — the mod anchors the *strongest* mon to the curve and
+**Levels.** Rather than assigning every mon the target level — which flattens a
+team into a mono-level wall — the mod anchors the *strongest* mon to the curve and
 shifts the rest by the same delta, preserving the authored spread.
 
-### Wild encounters — a deliberate departure
-
-Crystal Clear freezes wild levels on purpose ("Wild data does not scale. This is
-an intentional design choice"). This mod scales them anyway, by request. Set
-`scale_wilds` off to get CC's behaviour back.
-
-Default mode is **raise only**: the curve acts as a floor, so each area keeps its
-own character — Route 29 stays gentler than Victory Road — and only levels the
-curve has outgrown get lifted. `replace` flattens every route to one level.
-
-The Bug Catching Contest is excluded: it is scored on the levels it hands out, so
-rescaling would rewrite the minigame rather than the world.
-
-Grass/water/cave and fishing are separate hooks (`encounter.species` and
-`encounter.fishing`); both are wrapped.
-
-### The Battle Tower is left alone
-
-The Tower is a level-normalised format: you register three mons, pick a room
-whose cap is a flat multiple of ten, and are refused entry if any mon exceeds it.
-Its opponents are authored down to their stats, PP and held items, and the cart
-deliberately switches badge stat boosts and badge type boosts **off** inside it —
-it is the one mode designed so your badge count does not matter.
-
-Scaling it to badge count would replace a tuned gauntlet with a lottery: a
-10-badge player would meet Lv37 opponents in the Lv50 room, and the same Lv37
-opponents in the Lv10 room while capped at Lv10 themselves.
-
-Tower battles do reach `trainer.party` — they carry a trainer like any other
-fight, with ordinary class ids — and the hook cannot see the `battleTower` flag
-the battle sets. So the mod reads `save.battleTower.challenge`
-(`sBattleTowerChallengeState`, `2` while a challenge runs) and skips scaling
-entirely for its duration.
-
-### Movesets
-
-A mon dragged to Lv75 still knowing its Lv7 moves is the single biggest reason
-scaled bosses stay easy: vanilla Falkner's Pidgey knows Tackle and Mud-Slap, and
-levelling it alone changes nothing about that.
-
-With `scale_movesets`, every scaled mon is rebuilt to what its species would
-know at its new level. Route trainers keep any moves their author chose that the
-species cannot learn by level — those are deliberate TM coverage.
-
-Bosses go further. Crystal Clear gives its leaders "fully custom movesets", and
-vanilla rosters have none, so with `boss_best_moves` a boss draws from its **TM
-pool** as well and keeps the four best attacks it could actually learn. Moves are
-ranked by expected damage — power x accuracy, x1.5 for STAB — with the moves
-whose raw power lies about their real output discounted: a turn spent charging or
-recharging (Solarbeam, Hyper Beam, Fly), fainting the user (Selfdestruct), and
-moves that are dead weight unless a condition the AI cannot arrange is already
-true (Dream Eater needs a sleeping target, Counter an incoming physical hit).
-
-At 10 badges that turns:
+**Movesets.** A mon dragged to Lv75 still knowing its Lv7 moves is the biggest
+reason scaled bosses stay easy. Every scaled mon is rebuilt to what its species
+knows at its new level; route trainers keep authored moves the species cannot
+learn by level, since those are deliberate TM coverage. Bosses draw from their
+**TM pool** too and keep the four best attacks they could learn, ranked by power ×
+accuracy with ×1.5 STAB — discounting moves whose raw power lies about their
+output: charging or recharging (Solarbeam, Hyper Beam, Fly), fainting the user
+(Selfdestruct), and moves needing a condition the AI cannot arrange (Dream Eater
+wants a sleeping target, Counter an incoming hit).
 
 ```
-Falkner  PIDGEY    L7  TACKLE, MUD_SLAP
-      -> PIDGEY    L50 SWIFT, WING_ATTACK, STEEL_WING, GUST
-Whitney  CLEFAIRY  L18 DOUBLESLAP, MIMIC, ENCORE, METRONOME
-      -> CLEFAIRY  L50 STRENGTH, HEADBUTT, FIRE_BLAST, PSYCHIC
+Falkner  PIDGEY   L7  TACKLE, MUD_SLAP
+      -> PIDGEY   L50 SWIFT, WING_ATTACK, STEEL_WING, GUST
+Whitney  CLEFAIRY L18 DOUBLESLAP, MIMIC, ENCORE, METRONOME
+      -> CLEFAIRY L50 STRENGTH, HEADBUTT, FIRE_BLAST, PSYCHIC
 ```
 
-### Team padding
+**Team padding.** Vanilla bosses carry teams as small as two (Falkner), which stay
+a pushover at Lv75, so boss teams grow linearly from their authored size at 0
+badges to six at 16, cloning from the authored roster to stay on-type.
 
-Vanilla bosses carry teams as small as two (Falkner), which stay a pushover at
-Lv75. Boss teams grow linearly from their authored size at 0 badges to a full
-six at 16, cloning entries from the authored roster so padding stays on-type.
+**Wild encounters — a deliberate departure.** CC freezes wild levels on purpose
+("Wild data does not scale. This is an intentional design choice"); this mod
+scales them anyway, by request. `scale_wilds` off restores CC's behaviour. Default
+mode is **raise only**, so the curve acts as a floor and each area keeps its own
+character — Route 29 stays gentler than Victory Road — while `replace` flattens
+every route to one level. Grass/water/cave and fishing are separate hooks
+(`encounter.species`, `encounter.fishing`); both are wrapped. The Bug Catching
+Contest is excluded, being scored on the levels it hands out.
+
+**The Battle Tower is left alone.** The Tower is level-normalised: three mons, a
+room whose cap is a flat multiple of ten, entry refused if any mon exceeds it, and
+opponents authored down to their stats, PP and held items. The cart switches badge
+stat and type boosts **off** inside it — it is the one mode designed so badge count
+cannot matter. Scaling it would make a lottery of a tuned gauntlet: a 10-badge
+player would meet Lv37 opponents in the Lv50 room, and the same Lv37 opponents in
+the Lv10 room while capped at Lv10. Tower battles do reach `trainer.party` and the
+hook cannot see the `battleTower` flag, so the mod reads
+`save.battleTower.challenge` (`sBattleTowerChallengeState`, `2` while a challenge
+runs) and skips scaling for its duration.
 
 ## Options
 
@@ -133,118 +118,64 @@ unobservable.
 
 ## Verified behaviour
 
-Driven through the engine's own `POKEPORT_DRIVER` seam against the real dataset:
+Driven through the engine's own `POKEPORT_DRIVER` seam against the real Crystal
+dataset:
 
 ```
- 0 badges  FALKNER    L7/L9    -> L5/L7        (2 mons)
- 8 badges  FALKNER    L7/L9    -> L41/L43      (4 mons)
-15 badges  FALKNER    L7/L9    -> L73/L75      (6 mons, hp 153/153 and 191/191)
- 0 badges  WHITNEY    L18/L20  -> L5/L7        (scaled DOWN -- fight her first)
-15 badges  YOUNGSTER  L4       -> L52          (softer overworld curve)
- any       SAGE       L3 x3    -> unchanged    (exempt)
-
- 0 badges  Route 29 SENTRET   L3  -> L5
- 8 badges  Route 29 SENTRET   L3  -> L29
-16 badges  Route 29 SENTRET   L3  -> L53
- 8 badges  Victory Rd GOLBAT  L42 -> L42   (raise-only keeps area character)
-16 badges  Victory Rd GOLBAT  L42 -> L53
- any       Bug Contest WEEDLE L9  -> L9    (excluded)
- 8 badges  fishing MAGIKARP   L10 -> L29
+ 0 badges  FALKNER            L7/L9   -> L5/L7      (2 mons)
+15 badges  FALKNER            L7/L9   -> L73/L75    (6 mons, hp 153 and 191)
+ 0 badges  WHITNEY            L18/L20 -> L5/L7      (scaled DOWN — fight her first)
+15 badges  YOUNGSTER          L4      -> L52        (softer overworld curve)
+ any       SAGE               L3 x3   -> unchanged  (exempt)
+ any       Battle Tower       L9/13/17-> unchanged  (challenge in progress)
+ 8 badges  Route 29 SENTRET   L3      -> L29
+16 badges  Victory Rd GOLBAT  L42     -> L53        (raise-only keeps character)
+ any       Bug Contest WEEDLE L9      -> L9         (excluded)
+ 8 badges  fishing MAGIKARP   L10     -> L29
 ```
 
 ## Known gaps
 
-- **Padding repeats species.** Falkner at 15 badges is three Pidgey and three
-  Pidgeotto. Intentional (padding stays on-type) but visibly repetitive.
+- **Padding repeats species**, and every clone shares one moveset. Falkner at 15
+  badges is three Pidgey and three Pidgeotto with identical attacks.
 - **Static legendaries follow the general wild curve**, not CC's own
-  `Lv5 + 5 x badges` capped at 50. Close in practice (base 5, 3.0/badge), but not
-  CC's exact numbers, and uncapped.
+  `Lv5 + 5 × badges` capped at 50. Close in practice, but uncapped.
 - **Roaming legendaries are not scaled.** `Roamers.beginBattle` hands the beast
   straight to the battle, never passing through `encounter.species`.
 - **Gen 1 is not targeted.** The manifest declares `gen2`, which the engine
   expands to gold/silver/crystal.
 
-## Layout
+## Development
 
 - `code/level_match/` — the mod (`manifest.json`, `main.lua`)
-- `install-levelmatch/` — installs to the local data dir, backing up saves first
-- `docs/`, `research/`
-
-## Install
-
-Download `level_match-vX.Y.Z.zip` from the
-[latest release](https://github.com/aaronjenkins/gen1recomp-levelmatch/releases/latest),
-then import it the way Gen1Recomp imports any mod:
-
-- **drag the `.zip` onto the game window**, or
-- open the launcher's mod manager and import the `.zip` from there.
-
-The engine validates the archive, then installs it to `mods/level_match/` — it
-takes the folder name from the manifest id, so the install is named correctly
-however the archive was built.
-
-Requires engine **0.2.x** (verified on 0.2.26). On 0.1.x the manifest's `gen2`
-target expands to Gold only, and Crystal is not a known game at all.
-
-### Updates
-
-The manifest declares its `github` repository, so the mod manager's update check
-sees new releases here and can install them in place. Only published release
-assets count — a GitHub source archive has the wrong layout and is never used.
-
-### Manual install
-
-If you would rather not use the importer, unzip the archive straight into the
-`mods/` directory of your install — it contains `level_match/` at its root:
-
-| Install | `mods/` location |
-|---|---|
-| macOS | `~/Library/Application Support/pokemon-love2d/mods/` |
-| Linux | `~/.local/share/pokemon-love2d/mods/` |
-| Portable | `<portable folder>/mods/` |
-
-### Development install (from a checkout)
-
-```
-./install-levelmatch/install-levelmatch.sh
-```
-
-Copies the mod into the engine's data directory, snapshotting `saves/` first.
-macOS paths; adjust for other platforms.
-
-## Releases
-
-Tagging `vX.Y.Z` builds and publishes a release automatically
-(`.github/workflows/release.yml`). The workflow refuses the tag if it disagrees
-with the `version` in `manifest.json`, since the mod manager shows the manifest
-version rather than the tag.
+- `install-levelmatch/` — installs into the local data dir, snapshotting `saves/`
+  first (macOS paths; adjust for other platforms)
+- `.github/workflows/release.yml` — tagging `vX.Y.Z` builds and publishes a
+  release. It refuses a tag disagreeing with `manifest.json`, since the mod
+  manager shows the manifest version rather than the tag.
 
 ## How this was built
 
-This mod was written with [Claude](https://claude.ai) (Claude Code), directed by
-the repository owner. The priorities, design decisions and scope calls are the
-owner's; the Lua, the release workflow and this README were drafted by the model.
+Written with [Claude](https://claude.ai) (Claude Code), directed by the repository
+owner: the priorities, design decisions and scope calls are the owner's; the Lua,
+the release workflow and this README were drafted by the model.
 
-**The numbers are sourced, not invented.** The tiers and levels come from Crystal
-Clear's official documentation (`ShockSlayer/ccdocs`): the ~Lv7-to-~Lv75 gym
-span, the deliberately softer overworld curve, the sidequest classes that never
-scale, and CC's own `Lv5 + 5 x badges` static formula. Crystal Clear hand-authors
-its gym teams per badge count and publishes no formula, so rather than silently
-guess one, the coefficients are exposed as options.
+**The numbers are sourced, not invented** — tiers and levels come from Crystal
+Clear's official documentation (`ShockSlayer/ccdocs`). Where CC publishes no
+formula, the coefficients are exposed as options rather than silently guessed.
 
 **What was verified.** The mod was exercised against the real Crystal dataset
-inside the running engine through its own `POKEPORT_DRIVER` seam: the hook fires
-with real trainer class ids, levels land on the documented endpoints, HP refills
-to the new maximum instead of keeping the pre-scaling value, exempt classes stay
-untouched, and grass, cave and fishing rolls all scale. Each published zip is
-checked against the importer's archive rules before release.
+inside the running engine through `POKEPORT_DRIVER`: the hook fires with real
+trainer class ids, levels land on the documented endpoints, HP refills to the new
+maximum instead of keeping the pre-scaling value, exempt classes and Battle Tower
+opponents stay untouched, and grass, cave and fishing rolls all scale. Each
+published zip is checked against the importer's archive rules.
 
-**What was not verified.** Nobody has played a full game with this. There is no
-playthrough behind it — no balance testing across a real run — and roaming
-legendaries may reach battle by a path the wild hook never sees. Treat the
-defaults as a starting point, and back up your saves before installing.
+**What was not verified.** Nobody has played a full game with this — there is no
+playthrough behind it and no balance testing across a real run. Treat the defaults
+as a starting point, and back up your saves before installing.
 
 ## License
 
-[MIT](LICENSE). The license ships inside the release zip too, so an installed
-copy carries its own terms.
+[MIT](LICENSE). The license ships inside the release zip, so an installed copy
+carries its own terms.
