@@ -144,6 +144,10 @@ dataset:
  8 badges  fishing MAGIKARP   L10     -> L29
 ```
 
+The mod declares the `engine_internals` permission: since 0.3.3 it reads
+`src.battle.gen2.Mon` to keep a scaled mon's `experience` consistent with its
+new level. That is an engine module, not another mod.
+
 ## Known gaps
 
 - **Padding repeats species**, and every clone shares one moveset. Falkner at 15
