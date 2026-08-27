@@ -37,6 +37,7 @@ jobs:
         run: |
           mkdir -p dist build
           cp -R code/level_match build/level_match
+          cp LICENSE build/level_match/LICENSE
           (cd build && zip -qr "../dist/level_match-${GITHUB_REF_NAME}.zip" level_match)
           ls -l dist
 

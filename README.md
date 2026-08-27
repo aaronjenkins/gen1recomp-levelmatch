@@ -172,3 +172,8 @@ Tagging `vX.Y.Z` builds and publishes a release automatically
 (`.github/workflows/release.yml`). The workflow refuses the tag if it disagrees
 with the `version` in `manifest.json`, since the mod manager shows the manifest
 version rather than the tag.
+
+## License
+
+[MIT](LICENSE). The license ships inside the release zip too, so an installed
+copy carries its own terms.
