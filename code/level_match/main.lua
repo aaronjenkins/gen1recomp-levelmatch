@@ -55,6 +55,10 @@ return function(mod)
       default = 7, min = 2, max = 50 },
     { key = "overworld_per_badge", type = "number", label = "TRNR LV/BADGE x10",
       default = 30, min = 0, max = 99 },
+    -- Bosses and route trainers scale independently: turning this off leaves
+    -- the gyms, E4 and rivals on the curve while routes keep vanilla levels.
+    { key = "scale_overworld", type = "toggle", label = "SCALE ROUTE TRNRS",
+      default = true },
     { key = "pad_boss_teams", type = "toggle", label = "PAD BOSS TEAMS",
       default = true },
     { key = "boss_full_team", type = "number", label = "BOSS TEAM AT 16",
@@ -194,6 +198,9 @@ return function(mod)
 
     local tier = tierFor(classId)
     if not tier then return composed end
+    if tier == "overworld" and not mod.options:get("scale_overworld") then
+      return composed
+    end
 
     local badges = badgeCount()
     local ok, result = pcall(rescale, composed, tier, badges)

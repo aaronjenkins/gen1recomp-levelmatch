@@ -28,7 +28,7 @@ Numbers come from the official Crystal Clear docs (`ShockSlayer/ccdocs`):
 | Tier | Behaviour | Source |
 |---|---|---|
 | Gyms, E4, champion, rivals, Red | ~Lv7 at 0 badges to ~Lv75 at 15 | CC docs, "Scaling Gyms" |
-| Overworld trainers | scale too, "but not as harshly" | CC docs, "Overworld Trainers" |
+| Overworld trainers | scale too, "but not as harshly" (toggle: `scale_overworld`) | CC docs, "Overworld Trainers" |
 | Sidequest trainers (`SAGE`, `MYSTICALMAN`) | never scale | CC docs names Sprout Tower, Eusine |
 | Wild encounters | **scale (departure from CC)** | see below |
 
@@ -70,6 +70,7 @@ six at 16, cloning entries from the authored roster so padding stays on-type.
 | `boss_per_badge` | 45 | tenths of a level per badge (4.5) |
 | `overworld_base` | 7 | overworld level at 0 badges |
 | `overworld_per_badge` | 30 | tenths of a level per badge (3.0) |
+| `scale_overworld` | on | scale route trainers (off = bosses only) |
 | `pad_boss_teams` | on | grow thin boss teams |
 | `boss_full_team` | 6 | boss team size at 16 badges |
 | `scale_wilds` | on | scale wild encounters (off = CC-exact) |
