@@ -1,7 +1,7 @@
 {
   "id": "level_match",
   "name": "Level Match",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Crystal Clear style badge-count enemy scaling. Every trainer scales to your badge count, so all 16 gyms can be faced in any order.",
   "author": "aaron",
   "github": "aaronjenkins/gen1recomp-levelmatch",

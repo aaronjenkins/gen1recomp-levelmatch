@@ -41,12 +41,19 @@ depends on no other mod.
 |---|---|---|
 | Gyms, E4, champion, rivals, Red | ~Lv7 at 0 badges to ~Lv75 at 15 | CC docs, "Scaling Gyms" |
 | Overworld trainers | scale too, "but not as harshly" | CC docs, "Overworld Trainers" |
-| Sidequest trainers (`SAGE`, `MYSTICALMAN`) | never scale | CC names Sprout Tower, Eusine |
+| Sidequest trainers (`SAGE`, `MYSTICALMAN`) | scale by default; `exempt_sidequest` restores CC's freeze | CC names Sprout Tower, Eusine |
 | Wild encounters | scale — **a departure from CC** | below |
 | Battle Tower | never scales | below |
 
 CC hand-authors its gym teams per badge count and publishes no formula, so the
 per-badge coefficients are options rather than constants.
+
+**Sidequest trainers scale, unlike in CC.** CC exempts "certain sidequest
+trainers (Eusine, Sprout Tower, etc.)", but that maps badly onto vanilla classes:
+`SAGE` alone spans the Lv3–10 Sprout Tower sages CC names, a Lv16–22
+Gastly/Haunter pair, and the **Lv32 Tin Tower sages** — so freezing the class left
+a late-game encounter at Lv32 while gyms ran to Lv79. They all scale by default;
+`exempt_sidequest` restores CC's behaviour.
 
 **Levels.** Rather than assigning every mon the target level — which flattens a
 team into a mono-level wall — the mod anchors the *strongest* mon to the curve and
@@ -103,6 +110,7 @@ runs) and skips scaling for its duration.
 | `overworld_base` | 7 | overworld level at 0 badges |
 | `overworld_per_badge` | 30 | tenths of a level per badge (3.0) |
 | `scale_overworld` | on | scale route trainers (off = bosses only) |
+| `exempt_sidequest` | **off** | freeze the sidequest classes, as CC does |
 | `scale_movesets` | on | rebuild movesets for the new level |
 | `boss_best_moves` | on | bosses also draw from their TM pool |
 | `pad_boss_teams` | on | grow thin boss teams |
@@ -126,7 +134,9 @@ dataset:
 15 badges  FALKNER            L7/L9   -> L73/L75    (6 mons, hp 153 and 191)
  0 badges  WHITNEY            L18/L20 -> L5/L7      (scaled DOWN — fight her first)
 15 badges  YOUNGSTER          L4      -> L52        (softer overworld curve)
- any       SAGE               L3 x3   -> unchanged  (exempt)
+10 badges  SAGE CHOW          L3 x3   -> L37 x3     (Sprout Tower)
+10 badges  SAGE KOJI          L32/L32 -> L37/L37    (Tin Tower)
+ any       SAGE, exempt on    L3 x3   -> unchanged
  any       Battle Tower       L9/13/17-> unchanged  (challenge in progress)
  8 badges  Route 29 SENTRET   L3      -> L29
 16 badges  Victory Rd GOLBAT  L42     -> L53        (raise-only keeps character)

@@ -37,8 +37,13 @@ local BOSS_CLASSES = {
   CHAMPION = true, RED = true, RIVAL1 = true, RIVAL2 = true,
 }
 
--- CC names its non-scaling trainers by quest; these are the vanilla Gen 2
--- classes those map onto.  SAGE is Sprout Tower, MYSTICALMAN is Eusine.
+-- Crystal Clear exempts "certain sidequest trainers (Eusine, Sprout Tower,
+-- etc.)".  Off by default here: the mapping onto vanilla classes is coarse, and
+-- freezing a whole class is worse than scaling it.  SAGE alone spans three
+-- groups -- the Lv3-10 Sprout Tower sages CC actually names, a Lv16-22
+-- Gastly/Haunter pair, and the Lv32 Tin Tower sages -- so exempting the class
+-- left a late-game encounter frozen at Lv32 while gyms ran to Lv79.
+-- `exempt_sidequest` restores CC's behaviour for anyone who wants it.
 local EXEMPT_CLASSES = { SAGE = true, MYSTICALMAN = true }
 
 return function(mod)
@@ -59,6 +64,8 @@ return function(mod)
     -- the gyms, E4 and rivals on the curve while routes keep vanilla levels.
     { key = "scale_overworld", type = "toggle", label = "SCALE ROUTE TRNRS",
       default = true },
+    { key = "exempt_sidequest", type = "toggle", label = "EXEMPT SIDEQUESTS",
+      default = false },
     -- A mon dragged to Lv75 still knowing its Lv7 moves is the single
     -- biggest reason scaled bosses stay easy.
     { key = "scale_movesets", type = "toggle", label = "SCALE MOVESETS",
@@ -129,7 +136,9 @@ return function(mod)
   local function tierFor(classId)
     if type(classId) ~= "string" then return "overworld" end
     local id = classId:upper()
-    if EXEMPT_CLASSES[id] then return nil end
+    if EXEMPT_CLASSES[id] and mod.options:get("exempt_sidequest") then
+      return nil
+    end
     if BOSS_CLASSES[id] then return "boss" end
     return "overworld"
   end
