@@ -31,6 +31,7 @@ Numbers come from the official Crystal Clear docs (`ShockSlayer/ccdocs`):
 | Overworld trainers | scale too, "but not as harshly" (toggle: `scale_overworld`) | CC docs, "Overworld Trainers" |
 | Sidequest trainers (`SAGE`, `MYSTICALMAN`) | never scale | CC docs names Sprout Tower, Eusine |
 | Wild encounters | **scale (departure from CC)** | see below |
+| Battle Tower | never scales | see below |
 
 CC's gym teams are hand-authored per badge count and it publishes no formula, so
 the per-badge coefficients are mod options rather than constants.
@@ -54,6 +55,24 @@ rescaling would rewrite the minigame rather than the world.
 
 Grass/water/cave and fishing are separate hooks (`encounter.species` and
 `encounter.fishing`); both are wrapped.
+
+### The Battle Tower is left alone
+
+The Tower is a level-normalised format: you register three mons, pick a room
+whose cap is a flat multiple of ten, and are refused entry if any mon exceeds it.
+Its opponents are authored down to their stats, PP and held items, and the cart
+deliberately switches badge stat boosts and badge type boosts **off** inside it —
+it is the one mode designed so your badge count does not matter.
+
+Scaling it to badge count would replace a tuned gauntlet with a lottery: a
+10-badge player would meet Lv37 opponents in the Lv50 room, and the same Lv37
+opponents in the Lv10 room while capped at Lv10 themselves.
+
+Tower battles do reach `trainer.party` — they carry a trainer like any other
+fight, with ordinary class ids — and the hook cannot see the `battleTower` flag
+the battle sets. So the mod reads `save.battleTower.challenge`
+(`sBattleTowerChallengeState`, `2` while a challenge runs) and skips scaling
+entirely for its duration.
 
 ### Movesets
 
@@ -142,10 +161,6 @@ Driven through the engine's own `POKEPORT_DRIVER` seam against the real dataset:
   CC's exact numbers, and uncapped.
 - **Roaming legendaries are not scaled.** `Roamers.beginBattle` hands the beast
   straight to the battle, never passing through `encounter.species`.
-- **Battle Tower opponents are scaled, and should not be.** Tower battles carry a
-  trainer, so they reach `trainer.party`, and the hook cannot see the
-  `battleTower` flag that would identify them. This breaks the Tower's fixed
-  level groups.
 - **Gen 1 is not targeted.** The manifest declares `gen2`, which the engine
   expands to gold/silver/crystal.
 

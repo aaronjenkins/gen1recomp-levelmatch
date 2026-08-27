@@ -108,6 +108,23 @@ return function(mod)
     return math.min(MAX_BADGES, n)
   end
 
+  -- sBattleTowerChallengeState: 0 normal, 2 tower (src/core/gen2/Save.lua
+  -- battleTowerState). The Battle Tower is a level-normalised format whose
+  -- whole point is that adventure progress does NOT follow you in -- the cart
+  -- switches badge stat boosts and badge type boosts off inside it -- and its
+  -- opponents are authored down to their stats, PP and held items. Scaling them
+  -- to badge count replaces a tuned gauntlet with a lottery: in the Lv50 room
+  -- a 10-badge player would face Lv37 opponents, and in the Lv10 room the same
+  -- player would face Lv37 opponents while capped at Lv10 themselves.
+  local TOWER_CHALLENGE_IN_PROGRESS = 2
+
+  local function inTowerChallenge()
+    local save = mod.game and mod.game.save
+    local tower = save and save.battleTower
+    return tower ~= nil
+      and tonumber(tower.challenge) == TOWER_CHALLENGE_IN_PROGRESS
+  end
+
   -- nil means "never scale this trainer".
   local function tierFor(classId)
     if type(classId) ~= "string" then return "overworld" end
@@ -316,6 +333,7 @@ return function(mod)
     local composed = nextFn() or party
     if not mod.options:get("enabled") then return composed end
     if type(composed) ~= "table" or #composed == 0 then return composed end
+    if inTowerChallenge() then return composed end
 
     local tier = tierFor(classId)
     if not tier then return composed end
