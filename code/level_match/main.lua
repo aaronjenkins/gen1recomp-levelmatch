@@ -288,6 +288,40 @@ return function(mod)
     mon.moves = built
   end
 
+  -- Mon.new stamps `experience` from the level it built at, so rewriting the
+  -- level leaves that field describing the old one. Nothing reads an enemy's
+  -- experience today -- rewards come from the loser's LEVEL, and the exp bar is
+  -- drawn for the player's party only -- but Mon.gainExperience recomputes the
+  -- level FROM it, so a stale total is a trap for anything that ever grants exp
+  -- to a trainer's mon. Recompute it rather than leave a lie in the data.
+  --
+  -- Clearing it instead would be worse: that path reads `(mon.experience or 0)`
+  -- and would compute level 1.
+  --
+  -- This is the engine's own module, not another mod, and the sandbox permits
+  -- it (only io/os/debug/package/ffi/love/jit are denied). Loaded through pcall
+  -- so a future engine that moves it degrades to leaving experience alone.
+  local monModule, monTried = nil, false
+  local function engineMon()
+    if not monTried then
+      monTried = true
+      local ok, module = pcall(require, "src.battle.gen2.Mon")
+      if ok then monModule = module end
+    end
+    return monModule
+  end
+
+  local function refreshExperience(mon, data)
+    local M = engineMon()
+    if not (M and M.growthFor and M.experienceForLevel) then return end
+    local def = data and data.pokemon and data.pokemon[mon.species]
+    if not def then return end
+    local ok, exp = pcall(function()
+      return M.experienceForLevel(M.growthFor(data, def.growthRate), mon.level or 1)
+    end)
+    if ok and type(exp) == "number" then mon.experience = exp end
+  end
+
   -- Battle mons are plain tables with no metatable (src/battle/gen2/Mon.lua),
   -- so a deep copy is itself a valid mon.
   local function deepCopy(value)
@@ -329,6 +363,7 @@ return function(mod)
       -- Clearing it makes the engine's refresh -- which runs immediately after
       -- this hook returns -- fill the mon to full.
       mon.hp = nil
+      if data then refreshExperience(mon, data) end
       if data and mod.options:get("scale_movesets") then
         rebuildMoves(mon, data, tier)
       end
