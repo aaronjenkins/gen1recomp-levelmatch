@@ -55,6 +55,34 @@ rescaling would rewrite the minigame rather than the world.
 Grass/water/cave and fishing are separate hooks (`encounter.species` and
 `encounter.fishing`); both are wrapped.
 
+### Movesets
+
+A mon dragged to Lv75 still knowing its Lv7 moves is the single biggest reason
+scaled bosses stay easy: vanilla Falkner's Pidgey knows Tackle and Mud-Slap, and
+levelling it alone changes nothing about that.
+
+With `scale_movesets`, every scaled mon is rebuilt to what its species would
+know at its new level. Route trainers keep any moves their author chose that the
+species cannot learn by level — those are deliberate TM coverage.
+
+Bosses go further. Crystal Clear gives its leaders "fully custom movesets", and
+vanilla rosters have none, so with `boss_best_moves` a boss draws from its **TM
+pool** as well and keeps the four best attacks it could actually learn. Moves are
+ranked by expected damage — power x accuracy, x1.5 for STAB — with the moves
+whose raw power lies about their real output discounted: a turn spent charging or
+recharging (Solarbeam, Hyper Beam, Fly), fainting the user (Selfdestruct), and
+moves that are dead weight unless a condition the AI cannot arrange is already
+true (Dream Eater needs a sleeping target, Counter an incoming physical hit).
+
+At 10 badges that turns:
+
+```
+Falkner  PIDGEY    L7  TACKLE, MUD_SLAP
+      -> PIDGEY    L50 SWIFT, WING_ATTACK, STEEL_WING, GUST
+Whitney  CLEFAIRY  L18 DOUBLESLAP, MIMIC, ENCORE, METRONOME
+      -> CLEFAIRY  L50 STRENGTH, HEADBUTT, FIRE_BLAST, PSYCHIC
+```
+
 ### Team padding
 
 Vanilla bosses carry teams as small as two (Falkner), which stay a pushover at
@@ -71,6 +99,8 @@ six at 16, cloning entries from the authored roster so padding stays on-type.
 | `overworld_base` | 7 | overworld level at 0 badges |
 | `overworld_per_badge` | 30 | tenths of a level per badge (3.0) |
 | `scale_overworld` | on | scale route trainers (off = bosses only) |
+| `scale_movesets` | on | rebuild movesets for the new level |
+| `boss_best_moves` | on | bosses also draw from their TM pool |
 | `pad_boss_teams` | on | grow thin boss teams |
 | `boss_full_team` | 6 | boss team size at 16 badges |
 | `scale_wilds` | on | scale wild encounters (off = CC-exact) |
@@ -105,17 +135,17 @@ Driven through the engine's own `POKEPORT_DRIVER` seam against the real dataset:
 
 ## Known gaps
 
-- **Movesets do not scale.** A Lv75 Pidgey still knows Tackle and Mud-Slap,
-  because vanilla rows carry an authored move list. CC gives its leaders custom
-  movesets; that is the natural next increment and the single biggest remaining
-  difficulty gap.
 - **Padding repeats species.** Falkner at 15 badges is three Pidgey and three
   Pidgeotto. Intentional (padding stays on-type) but visibly repetitive.
 - **Static legendaries follow the general wild curve**, not CC's own
   `Lv5 + 5 x badges` capped at 50. Close in practice (base 5, 3.0/badge), but not
   CC's exact numbers, and uncapped.
-- **Roaming legendaries are unverified.** Raikou/Entei/Suicune may reach battle
-  by a path that does not pass through `encounter.species`.
+- **Roaming legendaries are not scaled.** `Roamers.beginBattle` hands the beast
+  straight to the battle, never passing through `encounter.species`.
+- **Battle Tower opponents are scaled, and should not be.** Tower battles carry a
+  trainer, so they reach `trainer.party`, and the hook cannot see the
+  `battleTower` flag that would identify them. This breaks the Tower's fixed
+  level groups.
 - **Gen 1 is not targeted.** The manifest declares `gen2`, which the engine
   expands to gold/silver/crystal.
 

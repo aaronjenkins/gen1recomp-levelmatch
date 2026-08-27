@@ -59,6 +59,15 @@ return function(mod)
     -- the gyms, E4 and rivals on the curve while routes keep vanilla levels.
     { key = "scale_overworld", type = "toggle", label = "SCALE ROUTE TRNRS",
       default = true },
+    -- A mon dragged to Lv75 still knowing its Lv7 moves is the single
+    -- biggest reason scaled bosses stay easy.
+    { key = "scale_movesets", type = "toggle", label = "SCALE MOVESETS",
+      default = true },
+    -- Crystal Clear gives its leaders "fully custom movesets". Vanilla rosters
+    -- have none, so bosses draw from their TM pool as well and keep the four
+    -- strongest attacks they could actually learn.
+    { key = "boss_best_moves", type = "toggle", label = "BOSS TM MOVES",
+      default = true },
     { key = "pad_boss_teams", type = "toggle", label = "PAD BOSS TEAMS",
       default = true },
     { key = "boss_full_team", type = "number", label = "BOSS TEAM AT 16",
@@ -144,6 +153,115 @@ return function(mod)
     return math.min(full, math.max(originalSize, math.floor(grown + 0.5)))
   end
 
+  local function moveEntry(data, id)
+    local def = data.moves and data.moves[id]
+    local pp = (def and def.pp) or 0
+    return { id = id, pp = pp, maxPp = pp }
+  end
+
+  -- Every move learned at or below `level`, in learn order, deduped. The
+  -- engine keeps a rolling window of four (src/battle/gen2/Mon.lua
+  -- movesAtLevel), so the last four of this list is what a wild mon of that
+  -- level would actually know.
+  local function levelPool(def, level)
+    local out, seen = {}, {}
+    for _, entry in ipairs((def and def.levelMoves) or {}) do
+      if (entry.level or 1) <= level and not seen[entry.move] then
+        seen[entry.move] = true
+        out[#out + 1] = entry.move
+      end
+    end
+    return out, seen
+  end
+
+  -- Raw power overstates a move that spends a turn charging, spends the next
+  -- turn recharging, or faints the user. Halving them keeps SOLARBEAM and
+  -- HYPER_BEAM from crowding out moves that actually hit every turn, and
+  -- SELFDESTRUCT from being picked at all.
+  local DISCOUNT = {
+    -- a turn spent charging or recharging
+    EFFECT_SOLARBEAM = 0.5, EFFECT_HYPER_BEAM = 0.5, EFFECT_FLY = 0.5,
+    EFFECT_SKY_ATTACK = 0.5, EFFECT_RAZOR_WIND = 0.5,
+    -- the user does not survive it
+    EFFECT_SELFDESTRUCT = 0.1,
+    EFFECT_RECOIL_HIT = 0.85,
+    -- dead weight unless a condition the AI cannot arrange is already true:
+    -- DREAM_EATER needs a sleeping target, SNORE a sleeping user, the two
+    -- counters an incoming hit of the right kind, FALSE_SWIPE deliberately
+    -- will not finish anything off.
+    EFFECT_DREAM_EATER = 0.15, EFFECT_SNORE = 0.15,
+    EFFECT_COUNTER = 0.15, EFFECT_MIRROR_COAT = 0.15,
+    EFFECT_FALSE_SWIPE = 0.15, EFFECT_BIDE = 0.15,
+    -- damage that only arrives later, or only after several unbroken turns
+    EFFECT_FUTURE_SIGHT = 0.5,
+    EFFECT_ROLLOUT = 0.6, EFFECT_FURY_CUTTER = 0.6,
+  }
+
+  -- Expected damage per use, with STAB. Status moves score 0 and are only
+  -- reached for when a species has fewer than four attacks available.
+  local function moveScore(data, def, id)
+    local m = data.moves and data.moves[id]
+    if not m or (m.power or 0) <= 0 then return 0 end
+    local score = (m.power or 0) * ((m.accuracy or 100) / 100)
+    score = score * (DISCOUNT[m.effect] or 1)
+    for _, t in ipairs((def and def.types) or {}) do
+      if t == m.type then return score * 1.5 end
+    end
+    return score
+  end
+
+  local function rebuildMoves(mon, data, tier)
+    local def = data and data.pokemon and data.pokemon[mon.species]
+    if not def then return end
+    local level = mon.level or 1
+    local pool, inPool = levelPool(def, level)
+
+    local chosen, seen = {}, {}
+    local function take(id)
+      if not id or seen[id] or #chosen >= 4 then return end
+      if not (data.moves and data.moves[id]) then return end
+      seen[id] = true
+      chosen[#chosen + 1] = id
+    end
+
+    local bossBest = tier == "boss" and mod.options:get("boss_best_moves")
+
+    -- Off a boss, moves the author picked that the species never learns by
+    -- level are deliberate TM coverage and are kept. On a boss they compete on
+    -- merit instead: privileging them is what put MIMIC and MUD_SLAP on a
+    -- Lv50 gym team and left it hitting like a Lv7 one.
+    if not bossBest then
+      for _, entry in ipairs(mon.moves or {}) do
+        local id = entry and entry.id
+        if id and not inPool[id] then take(id) end
+      end
+    end
+
+    if bossBest then
+      local candidates = {}
+      for _, entry in ipairs(mon.moves or {}) do
+        if entry and entry.id then candidates[#candidates + 1] = entry.id end
+      end
+      for _, id in ipairs(pool) do candidates[#candidates + 1] = id end
+      for _, id in ipairs(def.tmhm or {}) do candidates[#candidates + 1] = id end
+      table.sort(candidates, function(a, b)
+        local sa, sb = moveScore(data, def, a), moveScore(data, def, b)
+        if sa == sb then return a < b end
+        return sa > sb
+      end)
+      for _, id in ipairs(candidates) do take(id) end
+    end
+
+    -- Fill from the newest level-up moves backwards: what the species would
+    -- know at this level.
+    for i = #pool, 1, -1 do take(pool[i]) end
+
+    if #chosen == 0 then return end
+    local built = {}
+    for _, id in ipairs(chosen) do built[#built + 1] = moveEntry(data, id) end
+    mon.moves = built
+  end
+
   -- Battle mons are plain tables with no metatable (src/battle/gen2/Mon.lua),
   -- so a deep copy is itself a valid mon.
   local function deepCopy(value)
@@ -153,7 +271,7 @@ return function(mod)
     return out
   end
 
-  local function rescale(party, tier, badges)
+  local function rescale(party, tier, badges, data)
     local size = #party
     if size == 0 then return party end
 
@@ -185,6 +303,9 @@ return function(mod)
       -- Clearing it makes the engine's refresh -- which runs immediately after
       -- this hook returns -- fill the mon to full.
       mon.hp = nil
+      if data and mod.options:get("scale_movesets") then
+        rebuildMoves(mon, data, tier)
+      end
     end
     return out
   end
@@ -203,7 +324,8 @@ return function(mod)
     end
 
     local badges = badgeCount()
-    local ok, result = pcall(rescale, composed, tier, badges)
+    local data = mod.game and mod.game.data
+    local ok, result = pcall(rescale, composed, tier, badges, data)
     if not ok then
       mod.log:error("rescale failed for %s: %s", tostring(classId), tostring(result))
       return composed
