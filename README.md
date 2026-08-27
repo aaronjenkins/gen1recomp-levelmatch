@@ -173,6 +173,31 @@ Tagging `vX.Y.Z` builds and publishes a release automatically
 with the `version` in `manifest.json`, since the mod manager shows the manifest
 version rather than the tag.
 
+## How this was built
+
+This mod was written with [Claude](https://claude.ai) (Claude Code), directed by
+the repository owner. The priorities, design decisions and scope calls are the
+owner's; the Lua, the release workflow and this README were drafted by the model.
+
+**The numbers are sourced, not invented.** The tiers and levels come from Crystal
+Clear's official documentation (`ShockSlayer/ccdocs`): the ~Lv7-to-~Lv75 gym
+span, the deliberately softer overworld curve, the sidequest classes that never
+scale, and CC's own `Lv5 + 5 x badges` static formula. Crystal Clear hand-authors
+its gym teams per badge count and publishes no formula, so rather than silently
+guess one, the coefficients are exposed as options.
+
+**What was verified.** The mod was exercised against the real Crystal dataset
+inside the running engine through its own `POKEPORT_DRIVER` seam: the hook fires
+with real trainer class ids, levels land on the documented endpoints, HP refills
+to the new maximum instead of keeping the pre-scaling value, exempt classes stay
+untouched, and grass, cave and fishing rolls all scale. Each published zip is
+checked against the importer's archive rules before release.
+
+**What was not verified.** Nobody has played a full game with this. There is no
+playthrough behind it — no balance testing across a real run — and roaming
+legendaries may reach battle by a path the wild hook never sees. Treat the
+defaults as a starting point, and back up your saves before installing.
+
 ## License
 
 [MIT](LICENSE). The license ships inside the release zip too, so an installed
