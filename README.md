@@ -177,8 +177,9 @@ formula, the coefficients are exposed as options rather than silently guessed.
 **What was verified.** The mod was exercised against the real Crystal dataset
 inside the running engine through `POKEPORT_DRIVER`: the hook fires with real
 trainer class ids, levels land on the documented endpoints, HP refills to the new
-maximum instead of keeping the pre-scaling value, exempt classes and Battle Tower
-opponents stay untouched, and grass, cave and fishing rolls all scale. Each
+maximum instead of keeping the pre-scaling value, Battle Tower opponents stay
+untouched mid-challenge, sidequest classes freeze only when `exempt_sidequest` is
+on, and grass, cave and fishing rolls all scale. Each
 published zip is checked against the importer's archive rules.
 
 **What was not verified.** Nobody has played a full game with this — there is no
