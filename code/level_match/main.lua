@@ -89,6 +89,8 @@ return function(mod)
     -- strongest attacks they could actually learn.
     { key = "boss_best_moves", type = "toggle", label = "BOSS TM MOVES",
       default = true },
+    { key = "evolve_scaled", type = "toggle", label = "EVOLVE SCALED MONS",
+      default = true },
     { key = "pad_boss_teams", type = "toggle", label = "PAD BOSS TEAMS",
       default = true },
     { key = "boss_full_team", type = "number", label = "BOSS TEAM AT 16",
@@ -202,6 +204,35 @@ return function(mod)
     if originalSize >= full then return originalSize end
     local grown = originalSize + (full - originalSize) * badges / MAX_BADGES
     return math.min(full, math.max(originalSize, math.floor(grown + 0.5)))
+  end
+
+  -- A boss dragged to Lv50 was still fielding an unevolved Pidgey, and the
+  -- padded clones inherited it. Follow the species' own EVOLVE_LEVEL chain as
+  -- far as the new level allows, so a scaled roster looks like a team that got
+  -- there rather than one that was stretched.
+  --
+  -- Only level evolutions. Stone and trade methods carry no level, so there is
+  -- no honest way to say whether this trainer would have used one; leaving them
+  -- alone keeps Clefairy a Clefairy rather than inventing a Moon Stone.
+  local function evolvedFor(species, level, data)
+    local pokemon = data and data.pokemon
+    if not pokemon then return species end
+    local current = species
+    -- a guard rather than trusting the data to be acyclic
+    for _ = 1, 8 do
+      local def = pokemon[current]
+      local nextForm = nil
+      for _, evo in ipairs((def and def.evolutions) or {}) do
+        if evo.method == "EVOLVE_LEVEL" and evo.into and pokemon[evo.into]
+            and (tonumber(evo.level) or math.huge) <= level then
+          nextForm = evo.into
+          break
+        end
+      end
+      if not nextForm then break end
+      current = nextForm
+    end
+    return current
   end
 
   local function moveEntry(data, id)
@@ -384,6 +415,13 @@ return function(mod)
 
     for _, mon in ipairs(out) do
       mon.level = math.max(1, math.min(MAX_LEVEL, (tonumber(mon.level) or 1) + delta))
+      -- Before experience and moves: growth rate, the learnset and the TM pool
+      -- all belong to the species, so the evolution has to land first.
+      -- Mon.refreshStats calls syncIdentity, which repairs name, types, gender
+      -- and the base stats from whatever species is set here.
+      if data and mod.options:get("evolve_scaled") then
+        mon.species = evolvedFor(mon.species, mon.level, data)
+      end
       -- Mon.refreshStats only ever clamps hp DOWN to the new maximum, so a mon
       -- whose level went up would walk in on its old, much smaller hp.
       -- Clearing it makes the engine's refresh -- which runs immediately after

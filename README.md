@@ -86,6 +86,22 @@ Whitney  CLEFAIRY L18 DOUBLESLAP, MIMIC, ENCORE, METRONOME
       -> CLEFAIRY L50 STRENGTH, HEADBUTT, FIRE_BLAST, PSYCHIC
 ```
 
+**Evolution.** A boss dragged to Lv50 was still fielding an unevolved Pidgey,
+and the padded clones inherited it. Scaled mons now follow their species'
+`EVOLVE_LEVEL` chain as far as the new level allows, so a scaled roster looks
+like a team that got there rather than one that was stretched:
+
+```
+Falkner  PIDGEY L7 / PIDGEOTTO L9   -> PIDGEOT L73 / PIDGEOT L75
+Bugsy    METAPOD / KAKUNA / SCYTHER -> BUTTERFREE / BEEDRILL / SCYTHER
+```
+
+Only level evolutions. Stone and trade methods carry no level, so there is no
+honest way to say whether this trainer would have used one — Whitney's Clefairy
+stays a Clefairy rather than being handed a Moon Stone, Bugsy keeps his Scyther
+rather than a traded Scizor, and Morty fields Haunters because Gengar is a trade
+too.
+
 **Team padding.** Vanilla bosses carry teams as small as two (Falkner), which stay
 a pushover at Lv75, so boss teams grow linearly from their authored size at 0
 badges to six at 16, cloning from the authored roster to stay on-type.
@@ -143,6 +159,7 @@ runs) and skips scaling for its duration.
 | `exempt_sidequest` | **off** | freeze the sidequest classes, as CC does |
 | `scale_movesets` | on | rebuild movesets for the new level |
 | `boss_best_moves` | on | bosses also draw from their TM pool |
+| `evolve_scaled` | on | evolve scaled mons to the form their level allows |
 | `pad_boss_teams` | on | grow thin boss teams |
 | `boss_full_team` | 6 | boss team size at 16 badges |
 | `scale_wilds` | on | scale wild encounters (off = CC-exact) |
@@ -185,8 +202,11 @@ new level. That is an engine module, not another mod.
 
 ## Known gaps
 
-- **Padding repeats species**, and every clone shares one moveset. Falkner at 15
-  badges is three Pidgey and three Pidgeotto with identical attacks.
+- **Padding still repeats species**, and every clone shares one moveset —
+  Falkner at 15 badges is six Pidgeot. Evolution improves what gets repeated,
+  not the repetition itself. Drawing padding from a type-matched pool of
+  trainer-used species is the obvious next step; note the pools are uneven
+  (Ghost has only four species across every trainer in the game).
 - **Static legendaries follow the general wild curve**, not CC's own
   `Lv5 + 5 × badges` capped at 50. Close in practice, but uncapped.
 - **Gen 1 is not targeted.** The manifest declares `gen2`, which the engine
