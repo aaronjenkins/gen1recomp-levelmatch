@@ -96,11 +96,22 @@ Falkner  PIDGEY L7 / PIDGEOTTO L9   -> PIDGEOT L73 / PIDGEOT L75
 Bugsy    METAPOD / KAKUNA / SCYTHER -> BUTTERFREE / BEEDRILL / SCYTHER
 ```
 
-Only level evolutions. Stone and trade methods carry no level, so there is no
-honest way to say whether this trainer would have used one — Whitney's Clefairy
-stays a Clefairy rather than being handed a Moon Stone, Bugsy keeps his Scyther
-rather than a traded Scizor, and Morty fields Haunters because Gengar is a trade
-too.
+`EVOLVE_LEVEL` and `EVOLVE_STAT` carry their own level and apply to everyone.
+`EVOLVE_ITEM` and `EVOLVE_TRADE` carry none, so they are a judgement rather than
+a rule: **leaders** take them from `stone_evo_level` (30) upward, route trainers
+never. A scaled leader has bothered with a Moon Stone; a Lass has not.
+
+```
+Whitney  CLEFAIRY -> CLEFABLE     Bugsy  SCYTHER -> SCIZOR
+Morty    GASTLY   -> GENGAR       Teacher's CLEFAIRY at Lv52 -> CLEFAIRY
+```
+
+Below the threshold nothing happens, so a 0-badge Whitney still fields a Lv5
+Clefairy. `EVOLVE_HAPPINESS` is left out entirely — Golbat stays a Golbat.
+
+Several species branch (Gloom to Vileplume or Bellossom, Poliwhirl to Poliwrath
+or Politoed, Eevee three ways). The first listed branch wins: arbitrary, but
+deterministic, so a given leader always fields the same team.
 
 **Team padding.** Vanilla bosses carry teams as small as two (Falkner), which stay
 a pushover at Lv75, so boss teams grow linearly from their authored size at 0
@@ -160,6 +171,8 @@ runs) and skips scaling for its duration.
 | `scale_movesets` | on | rebuild movesets for the new level |
 | `boss_best_moves` | on | bosses also draw from their TM pool |
 | `evolve_scaled` | on | evolve scaled mons to the form their level allows |
+| `boss_stone_evos` | on | leaders also take stone and trade evolutions |
+| `stone_evo_level` | 30 | the level from which a stone or trade is assumed |
 | `pad_boss_teams` | on | grow thin boss teams |
 | `boss_full_team` | 6 | boss team size at 16 badges |
 | `scale_wilds` | on | scale wild encounters (off = CC-exact) |

@@ -91,6 +91,15 @@ return function(mod)
       default = true },
     { key = "evolve_scaled", type = "toggle", label = "EVOLVE SCALED MONS",
       default = true },
+    -- Bosses also get the evolutions that carry no level of their own -- stones
+    -- and trades -- on the reasoning that a leader scaled into the seventies
+    -- would have bothered. Route trainers do not.
+    { key = "boss_stone_evos", type = "toggle", label = "LEADERS USE STONES",
+      default = true },
+    -- The level from which a stone or trade is assumed to have happened. Below
+    -- it Whitney keeps a Clefairy, which is what a 0-badge Whitney should have.
+    { key = "stone_evo_level", type = "number", label = "STONE EVO FROM LV",
+      default = 30, min = 2, max = 100 },
     { key = "pad_boss_teams", type = "toggle", label = "PAD BOSS TEAMS",
       default = true },
     { key = "boss_full_team", type = "number", label = "BOSS TEAM AT 16",
@@ -211,10 +220,18 @@ return function(mod)
   -- far as the new level allows, so a scaled roster looks like a team that got
   -- there rather than one that was stretched.
   --
-  -- Only level evolutions. Stone and trade methods carry no level, so there is
-  -- no honest way to say whether this trainer would have used one; leaving them
-  -- alone keeps Clefairy a Clefairy rather than inventing a Moon Stone.
-  local function evolvedFor(species, level, data)
+  -- EVOLVE_LEVEL and EVOLVE_STAT carry their own level and apply to everyone.
+  -- EVOLVE_ITEM and EVOLVE_TRADE carry none, so they are a judgement rather
+  -- than a rule: bosses take them from `stone_evo_level` upward, route trainers
+  -- never. EVOLVE_HAPPINESS is left out -- Golbat stays a Golbat.
+  --
+  -- Several species branch (Gloom to Vileplume or Bellossom, Poliwhirl to
+  -- Poliwrath or Politoed, Eevee three ways). The first listed branch wins:
+  -- arbitrary, but deterministic, so a given leader always fields the same
+  -- team.
+  local NO_LEVEL_EVOS = { EVOLVE_ITEM = true, EVOLVE_TRADE = true }
+
+  local function evolvedFor(species, level, data, allowNoLevel)
     local pokemon = data and data.pokemon
     if not pokemon then return species end
     local current = species
@@ -222,11 +239,18 @@ return function(mod)
     for _ = 1, 8 do
       local def = pokemon[current]
       local nextForm = nil
+      local threshold = optionNumber("stone_evo_level", 30)
       for _, evo in ipairs((def and def.evolutions) or {}) do
-        if evo.method == "EVOLVE_LEVEL" and evo.into and pokemon[evo.into]
-            and (tonumber(evo.level) or math.huge) <= level then
-          nextForm = evo.into
-          break
+        local method = evo.method
+        if evo.into and pokemon[evo.into] then
+          if (method == "EVOLVE_LEVEL" or method == "EVOLVE_STAT")
+              and (tonumber(evo.level) or math.huge) <= level then
+            nextForm = evo.into
+            break
+          elseif allowNoLevel and NO_LEVEL_EVOS[method] and level >= threshold then
+            nextForm = evo.into
+            break
+          end
         end
       end
       if not nextForm then break end
@@ -420,7 +444,9 @@ return function(mod)
       -- Mon.refreshStats calls syncIdentity, which repairs name, types, gender
       -- and the base stats from whatever species is set here.
       if data and mod.options:get("evolve_scaled") then
-        mon.species = evolvedFor(mon.species, mon.level, data)
+        local stones = (tier == "boss" or tier == "postgame")
+          and mod.options:get("boss_stone_evos")
+        mon.species = evolvedFor(mon.species, mon.level, data, stones)
       end
       -- Mon.refreshStats only ever clamps hp DOWN to the new maximum, so a mon
       -- whose level went up would walk in on its old, much smaller hp.
