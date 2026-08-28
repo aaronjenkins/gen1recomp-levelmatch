@@ -44,6 +44,8 @@ depends on no other mod.
 | Overworld trainers | scale too, "but not as harshly" | CC docs, "Overworld Trainers" |
 | Sidequest trainers (`SAGE`, `MYSTICALMAN`) | scale by default; `exempt_sidequest` restores CC's freeze | CC names Sprout Tower, Eusine |
 | Wild encounters | scale — **a departure from CC** | below |
+| Roaming beasts | scale (`scale_roamers`, writes to the save) | below |
+| Scripted statics | **not scaled** — see Known gaps | — |
 | Battle Tower | never scales | below |
 
 CC hand-authors its gym teams per badge count and publishes no formula, so the
@@ -81,9 +83,9 @@ wants a sleeping target, Counter an incoming hit).
 
 ```
 Falkner  PIDGEY   L7  TACKLE, MUD_SLAP
-      -> PIDGEY   L50 SWIFT, WING_ATTACK, STEEL_WING, GUST
+      -> PIDGEOT  L50 HYPER_BEAM, SWIFT, WING_ATTACK, STEEL_WING
 Whitney  CLEFAIRY L18 DOUBLESLAP, MIMIC, ENCORE, METRONOME
-      -> CLEFAIRY L50 STRENGTH, HEADBUTT, FIRE_BLAST, PSYCHIC
+      -> CLEFABLE L50 STRENGTH, HEADBUTT, FIRE_BLAST, HYPER_BEAM
 ```
 
 **Evolution.** A boss dragged to Lv50 was still fielding an unevolved Pidgey,
@@ -93,7 +95,7 @@ like a team that got there rather than one that was stretched:
 
 ```
 Falkner  PIDGEY L7 / PIDGEOTTO L9   -> PIDGEOT L73 / PIDGEOT L75
-Bugsy    METAPOD / KAKUNA / SCYTHER -> BUTTERFREE / BEEDRILL / SCYTHER
+Bugsy    METAPOD / KAKUNA / SCYTHER -> BUTTERFREE / BEEDRILL / SCIZOR
 ```
 
 `EVOLVE_LEVEL` and `EVOLVE_STAT` carry their own level and apply to everyone.
@@ -192,7 +194,7 @@ dataset:
 
 ```
  0 badges  FALKNER            L7/L9   -> L5/L7      (2 mons)
-15 badges  FALKNER            L7/L9   -> L73/L75    (6 mons, hp 153 and 191)
+15 badges  FALKNER            L7/L9   -> L73/L75    (6 PIDGEOT, hp 215 and 221)
 16 badges  RED                L81 ace -> L85 ace    (postgame tier; was L79 on the boss curve)
  8 badges  RED                L81 ace -> L53 ace    (scales down if reached early)
  0 badges  WHITNEY            L18/L20 -> L5/L7      (scaled DOWN — fight her first)
@@ -220,8 +222,14 @@ new level. That is an engine module, not another mod.
   not the repetition itself. Drawing padding from a type-matched pool of
   trainer-used species is the obvious next step; note the pools are uneven
   (Ghost has only four species across every trainer in the game).
-- **Static legendaries follow the general wild curve**, not CC's own
-  `Lv5 + 5 × badges` capped at 50. Close in practice, but uncapped.
+- **Scripted static encounters are not scaled at all.** Sudowoodo, Snorlax, the
+  legendary birds, Ho-Oh/Lugia and the Red Gyarados are placed by the
+  `loadwildmon` script opcode, which sets the species and level straight from
+  the script row and hands them to `startbattle` — so, like the roaming beasts,
+  they never reach `rollEncounter` and never see `encounter.species`. Unlike the
+  roamers there is no dedicated event for them, but `script.command` sees every
+  `loadwildmon` row and is the obvious seam. CC scales these as
+  `Lv5 + 5 × badges` capped at 50.
 - **Gen 1 is not targeted.** The manifest declares `gen2`, which the engine
   expands to gold/silver/crystal.
 
