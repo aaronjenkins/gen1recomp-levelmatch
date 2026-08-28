@@ -39,7 +39,8 @@ depends on no other mod.
 
 | Tier | Behaviour | Source |
 |---|---|---|
-| Gyms, E4, champion, rivals, Red | ~Lv7 at 0 badges to ~Lv75 at 15 | CC docs, "Scaling Gyms" |
+| Gyms, E4, champion, rivals | ~Lv7 at 0 badges to ~Lv75 at 15 | CC docs, "Scaling Gyms" |
+| Red | his own curve, ~Lv85 at 16 badges | see below |
 | Overworld trainers | scale too, "but not as harshly" | CC docs, "Overworld Trainers" |
 | Sidequest trainers (`SAGE`, `MYSTICALMAN`) | scale by default; `exempt_sidequest` restores CC's freeze | CC names Sprout Tower, Eusine |
 | Wild encounters | scale — **a departure from CC** | below |
@@ -54,6 +55,15 @@ trainers (Eusine, Sprout Tower, etc.)", but that maps badly onto vanilla classes
 Gastly/Haunter pair, and the **Lv32 Tin Tower sages** — so freezing the class left
 a late-game encounter at Lv32 while gyms ran to Lv79. They all scale by default;
 `exempt_sidequest` restores CC's behaviour.
+
+**Red gets his own tier.** He is the one trainer vanilla authors above anything
+the boss curve can reach: his ace is Lv81 against a boss ceiling of Lv79 at 16
+badges, so putting him on the boss curve could only ever make the hardest fight
+in the game *easier*. On his own curve he reaches ~Lv85 at 16 badges — above
+vanilla, as he should be once every other tier has scaled up too — while still
+scaling down if you somehow reach Mt. Silver early. Nothing else comes close to
+the ceiling: the next highest boss tops out at Lv58, and the Elite Four have no
+rematch rosters in vanilla, so this tier is Red alone.
 
 **Levels.** Rather than assigning every mon the target level — which flattens a
 team into a mono-level wall — the mod anchors the *strongest* mon to the curve and
@@ -125,6 +135,8 @@ runs) and skips scaling for its duration.
 | `enabled` | on | master switch |
 | `boss_base` | 7 | gym level at 0 badges |
 | `boss_per_badge` | 45 | tenths of a level per badge (4.5) |
+| `postgame_base` | 21 | Red's level at 0 badges |
+| `postgame_per_badge` | 40 | tenths of a level per badge (4.0) |
 | `overworld_base` | 7 | overworld level at 0 badges |
 | `overworld_per_badge` | 30 | tenths of a level per badge (3.0) |
 | `scale_overworld` | on | scale route trainers (off = bosses only) |
@@ -151,6 +163,8 @@ dataset:
 ```
  0 badges  FALKNER            L7/L9   -> L5/L7      (2 mons)
 15 badges  FALKNER            L7/L9   -> L73/L75    (6 mons, hp 153 and 191)
+16 badges  RED                L81 ace -> L85 ace    (postgame tier; was L79 on the boss curve)
+ 8 badges  RED                L81 ace -> L53 ace    (scales down if reached early)
  0 badges  WHITNEY            L18/L20 -> L5/L7      (scaled DOWN — fight her first)
 15 badges  YOUNGSTER          L4      -> L52        (softer overworld curve)
 10 badges  SAGE CHOW          L3 x3   -> L37 x3     (Sprout Tower)

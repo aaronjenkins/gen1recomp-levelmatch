@@ -32,10 +32,18 @@ local BOSS_CLASSES = {
   -- Kanto gyms
   BROCK = true, MISTY = true, LT_SURGE = true, ERIKA = true,
   JANINE = true, SABRINA = true, BLAINE = true, BLUE = true,
-  -- Elite Four, champion, the rivals, and the Mt. Silver fight
+  -- Elite Four, champion and the rivals
   WILL = true, KOGA = true, BRUNO = true, KAREN = true,
-  CHAMPION = true, RED = true, RIVAL1 = true, RIVAL2 = true,
+  CHAMPION = true, RIVAL1 = true, RIVAL2 = true,
 }
+
+-- Red is the one trainer vanilla authors ABOVE anything the boss curve can
+-- reach: his ace is Lv81 against a boss ceiling of Lv79 at 16 badges, so the
+-- boss curve could only ever make the hardest fight in the game easier. He gets
+-- his own curve. Nothing else in Crystal comes within eight levels of the
+-- ceiling -- the next highest boss tops out at Lv58 -- and the Elite Four have
+-- no rematch rosters here, so this tier is Red alone.
+local POSTGAME_CLASSES = { RED = true }
 
 -- Crystal Clear exempts "certain sidequest trainers (Eusine, Sprout Tower,
 -- etc.)".  Off by default here: the mapping onto vanilla classes is coarse, and
@@ -56,6 +64,12 @@ return function(mod)
       default = 7, min = 2, max = 50 },
     { key = "boss_per_badge", type = "number", label = "GYM LV/BADGE x10",
       default = 45, min = 0, max = 99 },
+    { key = "postgame_base", type = "number", label = "RED BASE LV",
+      default = 21, min = 2, max = 60 },
+    -- 21 + 4.0 x 16 = Lv85, four above vanilla's Lv81, so the superboss stays
+    -- the hardest thing in the game once every other tier has scaled up too.
+    { key = "postgame_per_badge", type = "number", label = "RED LV/BADGE x10",
+      default = 40, min = 0, max = 99 },
     { key = "overworld_base", type = "number", label = "TRAINER BASE LV",
       default = 7, min = 2, max = 50 },
     { key = "overworld_per_badge", type = "number", label = "TRNR LV/BADGE x10",
@@ -145,13 +159,17 @@ return function(mod)
     if EXEMPT_CLASSES[id] and mod.options:get("exempt_sidequest") then
       return nil
     end
+    if POSTGAME_CLASSES[id] then return "postgame" end
     if BOSS_CLASSES[id] then return "boss" end
     return "overworld"
   end
 
   local function targetLevel(tier, badges)
     local base, perTenths
-    if tier == "boss" then
+    if tier == "postgame" then
+      base = optionNumber("postgame_base", 21)
+      perTenths = optionNumber("postgame_per_badge", 40)
+    elseif tier == "boss" then
       base = optionNumber("boss_base", 7)
       perTenths = optionNumber("boss_per_badge", 45)
     else
@@ -176,7 +194,8 @@ return function(mod)
   -- a pushover at Lv75 no matter the level.  Grow linearly from the authored
   -- size at 0 badges to a full team at 16.
   local function targetSize(tier, originalSize, badges)
-    if tier ~= "boss" or not mod.options:get("pad_boss_teams") then
+    if not (tier == "boss" or tier == "postgame")
+        or not mod.options:get("pad_boss_teams") then
       return originalSize
     end
     local full = math.min(6, math.max(1, optionNumber("boss_full_team", 6)))
@@ -256,7 +275,8 @@ return function(mod)
       chosen[#chosen + 1] = id
     end
 
-    local bossBest = tier == "boss" and mod.options:get("boss_best_moves")
+    local bossBest = (tier == "boss" or tier == "postgame")
+      and mod.options:get("boss_best_moves")
 
     -- Off a boss, moves the author picked that the species never learns by
     -- level are deliberate TM coverage and are kept. On a boss they compete on
