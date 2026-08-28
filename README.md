@@ -217,11 +217,27 @@ new level. That is an engine module, not another mod.
 
 ## Known gaps
 
-- **Padding still repeats species**, and every clone shares one moveset —
-  Falkner at 15 badges is six Pidgeot. Evolution improves what gets repeated,
-  not the repetition itself. Drawing padding from a type-matched pool of
-  trainer-used species is the obvious next step; note the pools are uneven
-  (Ghost has only four species across every trainer in the game).
+- **Padding repeats species, and evolution makes that worse on some teams.**
+  Evolving collapses an evolutionary line into a single species, so a leader
+  whose roster varied only by *stage* ends up entirely uniform:
+
+  ```
+  Morty    GASTLY / HAUNTER / GENGAR / HAUNTER  ->  6x GENGAR
+  Falkner  PIDGEY / PIDGEOTTO                   ->  6x PIDGEOT
+  Clair    DRAGONAIR x3 / KINGDRA               ->  5x DRAGONITE + KINGDRA
+  Bugsy    METAPOD / KAKUNA / SCYTHER           ->  BUTTERFREE / BEEDRILL / SCIZOR
+  ```
+
+  Bugsy stays varied because his three mons are three separate lines. Falkner
+  was three Pidgey and three Pidgeotto before evolution, which at least read as
+  two Pokemon; now it is six of one. So evolution traded "unevolved and wrong"
+  for "evolved and monotonous" on single-line teams, and every clone shares one
+  moveset besides.
+
+  Drawing padding from a type-matched pool of trainer-used species is the fix.
+  The pools are uneven, though, and Morty is the worst case for it as well as
+  for the current behaviour: Ghost has only four species across every trainer in
+  the game (Gastly, Haunter, Gengar, Misdreavus).
 - **Scripted static encounters are not scaled at all.** Sudowoodo, Snorlax, the
   legendary birds, Ho-Oh/Lugia and the Red Gyarados are placed by the
   `loadwildmon` script opcode, which sets the species and level straight from
