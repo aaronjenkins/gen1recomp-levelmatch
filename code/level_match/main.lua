@@ -91,6 +91,12 @@ return function(mod)
       default = 5, min = 2, max = 50 },
     { key = "wild_per_badge", type = "number", label = "WILD LV/BADGE x10",
       default = 30, min = 0, max = 99 },
+    -- Raikou, Entei and Suicune never reach encounter.species: the roamer
+    -- check replaces the map's encounter and starts the battle itself. Their
+    -- level lives in the save, so scaling them WRITES TO THE SAVE and sticks
+    -- even if this mod is later removed. Its own switch for that reason.
+    { key = "scale_roamers", type = "toggle", label = "SCALE ROAMERS",
+      default = true },
     -- -1 reads the save.  Any other value pretends that many badges, which is
     -- the only way to feel the curve on a fresh file.
     { key = "debug_badges", type = "number", label = "TEST BADGES (-1 OFF)",
@@ -420,6 +426,34 @@ return function(mod)
     end
     roll.level = wildLevel(roll.level, badgeCount())
     return roll
+  end)
+
+  -- The three roaming beasts bypass every encounter hook: World's roamer check
+  -- runs before ChooseWildEncounter, builds the mon from the save slot and
+  -- calls startBattle directly, returning before rollEncounter. (The engine's
+  -- own comment in src/core/gen2/Roamers.lua says encounter.species "still runs
+  -- downstream" for them -- it does not; the branch returns first.)
+  --
+  -- `roamer.encountered` fires from inside the roll that picked the beast, and
+  -- its payload carries the LIVE save slot -- Roamers.slot returns
+  -- save.roamers[index] itself, not a copy -- so setting slot.level here is
+  -- read by Roamers.beginBattle a moment later when it builds the mon.
+  mod.events:on("roamer.encountered", function(payload)
+    if not mod.options:get("enabled") then return end
+    if not mod.options:get("scale_wilds") then return end
+    if not mod.options:get("scale_roamers") then return end
+    local slot = payload and payload.slot
+    if type(slot) ~= "table" then return end
+    local current = tonumber(slot.level) or 40
+    local want = wildLevel(current, badgeCount())
+    if want == current then return end
+    slot.level = want
+    -- Banked HP is the beast's wound between encounters. Leaving it alone
+    -- keeps that meaning; a raised level simply makes the same banked value a
+    -- smaller share of a bigger bar, which is what a hurt beast should look
+    -- like. Only an untouched slot (hp 0) gets a full bar, which beginBattle
+    -- already does for itself.
+    mod.log:info("roamer %s scaled to L%d", tostring(slot.species), want)
   end)
 
   mod.log:info("level_match ready -- trainer.party + wild encounter scaling")

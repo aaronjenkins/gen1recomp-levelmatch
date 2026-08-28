@@ -89,6 +89,24 @@ every route to one level. Grass/water/cave and fishing are separate hooks
 (`encounter.species`, `encounter.fishing`); both are wrapped. The Bug Catching
 Contest is excluded, being scored on the levels it hands out.
 
+**The roaming beasts take a different route.** Raikou, Entei and Suicune never
+reach `encounter.species`: the roamer check runs before `ChooseWildEncounter`,
+builds the mon straight from its save slot and calls `startBattle` itself,
+returning before `rollEncounter`. (The engine's own comment in
+`src/core/gen2/Roamers.lua` says `encounter.species` "still runs downstream" for
+them — it does not; that branch returns first.)
+
+The seam is the `roamer.encountered` event, which fires from inside the roll that
+picked the beast and whose payload carries the **live** save slot —
+`Roamers.slot` returns `save.roamers[index]` itself, not a copy — so setting
+`slot.level` there is what `Roamers.beginBattle` reads a moment later.
+
+Because that level lives in the save, **scaling a roamer writes to the save and
+persists**, even if this mod is later removed. `scale_roamers` exists so that is
+a choice. Banked HP is left alone: it represents the beast's wound between
+encounters, so a raised level simply makes the same banked value a smaller share
+of a bigger bar.
+
 **The Battle Tower is left alone.** The Tower is level-normalised: three mons, a
 room whose cap is a flat multiple of ten, entry refused if any mon exceeds it, and
 opponents authored down to their stats, PP and held items. The cart switches badge
@@ -119,6 +137,7 @@ runs) and skips scaling for its duration.
 | `wild_mode` | raise_only | `raise_only` floors levels, `replace` flattens |
 | `wild_base` | 5 | wild level at 0 badges |
 | `wild_per_badge` | 30 | tenths of a level per badge (3.0) |
+| `scale_roamers` | on | scale Raikou/Entei/Suicune (writes to the save) |
 | `debug_badges` | -1 | pretend this many badges; -1 reads the save |
 
 `debug_badges` exists because a fresh file has zero badges, where the curve is
@@ -142,6 +161,8 @@ dataset:
 16 badges  Victory Rd GOLBAT  L42     -> L53        (raise-only keeps character)
  any       Bug Contest WEEDLE L9      -> L9         (excluded)
  8 badges  fishing MAGIKARP   L10     -> L29
+16 badges  roaming RAIKOU     L40     -> L53        (hp 161/161, from the save slot)
+ 8 badges  roaming RAIKOU     L40     -> L40        (raise-only floor is below it)
 ```
 
 The mod declares the `engine_internals` permission: since 0.3.3 it reads
@@ -154,8 +175,6 @@ new level. That is an engine module, not another mod.
   badges is three Pidgey and three Pidgeotto with identical attacks.
 - **Static legendaries follow the general wild curve**, not CC's own
   `Lv5 + 5 × badges` capped at 50. Close in practice, but uncapped.
-- **Roaming legendaries are not scaled.** `Roamers.beginBattle` hands the beast
-  straight to the battle, never passing through `encounter.species`.
 - **Gen 1 is not targeted.** The manifest declares `gen2`, which the engine
   expands to gold/silver/crystal.
 
