@@ -134,6 +134,37 @@ return function(mod)
     -- even if this mod is later removed. Its own switch for that reason.
     { key = "scale_roamers", type = "toggle", label = "SCALE ROAMERS",
       default = true },
+    -- ------------------------------------------------------------------
+    -- Rewards.  Scaling the enemy also scales what beating it pays.  Exp is
+    -- baseExp x the defeated level / 7, so at 8 badges a Bug Catcher hands
+    -- over 2124 exp where vanilla's Lv3 one handed over 66 -- 32x, on a curve
+    -- that only steepens.  Prize money is baseMoney x the level of the LAST
+    -- mon on the roster, which inflates the same way: 3-10x on routes.
+    --
+    -- That inflation makes the game EASIER.  Enemies follow the badge count
+    -- and nothing follows the player, so exp that outruns the curve buys a
+    -- party the curve can no longer threaten.  These rows put the player on a
+    -- curve as well.
+    --
+    -- Off by default.  It changes how a whole run paces, and it is not what
+    -- earlier versions of this mod did.
+    { key = "lean_rewards", type = "toggle", label = "LEAN REWARDS",
+      default = false },
+    -- Which curve the player's own level cap follows.  BOSS is the level of
+    -- the gym leader the badge count says you can face, so a capped party
+    -- meets a leader level for level and has to win the fight on play.
+    { key = "exp_cap_tier", type = "choice", label = "EXP CAP CURVE",
+      default = "boss",
+      choices = { { "BOSS", "boss" }, { "GYM TRNR", "gym" },
+                  { "ROUTE TRNR", "overworld" }, { "OFF", "off" } } },
+    -- A mon at or above the cap keeps this share, so a capped party creeps
+    -- instead of freezing.  0 stops it dead.
+    { key = "exp_over_cap", type = "number", label = "EXP OVER CAP %",
+      default = 10, min = 0, max = 100 },
+    { key = "exp_rate", type = "number", label = "EXP UNDER CAP %",
+      default = 100, min = 5, max = 300 },
+    { key = "money_rate", type = "number", label = "PRIZE MONEY %",
+      default = 50, min = 0, max = 300 },
     -- -1 reads the save.  Any other value pretends that many badges, which is
     -- the only way to feel the curve on a fresh file.
     { key = "debug_badges", type = "number", label = "TEST BADGES (-1 OFF)",
@@ -264,6 +295,14 @@ return function(mod)
     level = math.max(2, math.min(MAX_LEVEL, math.floor(level + 0.5)))
     if mod.options:get("wild_mode") == "replace" then return level end
     return math.max(tonumber(current) or 1, level)
+  end
+
+  -- The player's own cap, read off the same curves the enemies use.  nil
+  -- means uncapped.
+  local function expCapLevel()
+    local tier = mod.options:get("exp_cap_tier")
+    if tier == nil or tier == "off" then return nil end
+    return targetLevel(tier, badgeCount())
   end
 
   -- Vanilla bosses carry authored teams as small as two (Falkner), which stay
@@ -621,5 +660,63 @@ return function(mod)
     mod.log:info("roamer %s scaled to L%d", tostring(slot.species), want)
   end)
 
-  mod.log:info("level_match ready -- trainer.party + wild encounter scaling")
+  -- ------------------------------------------------------------------
+  -- Rewards
+  -- ------------------------------------------------------------------
+
+  -- `exp.gain` is called once per recipient, per KO, with the mon that is
+  -- about to be paid (src/battle/gen2/Battle.lua giveExperiencePass).  The
+  -- cap is therefore per mon, not per party: a fresh Lv5 catch still earns at
+  -- full rate while the rest of a capped team creeps.
+  --
+  -- The Battle Tower is left out for the same reason it is left out of
+  -- scaling -- it is a level-normalised format, and starving its exp would
+  -- tax a mode the curve never touched.
+  mod.hooks:wrap("exp.gain", function(nextFn, ctx)
+    local amount = nextFn()
+    if type(amount) ~= "number" then return amount end
+    if not mod.options:get("enabled") then return amount end
+    if not mod.options:get("lean_rewards") then return amount end
+    if inTowerChallenge() then return amount end
+
+    local cap = expCapLevel()
+    local level = tonumber(ctx and ctx.mon and ctx.mon.level)
+    local percent
+    if cap and level and level >= cap then
+      percent = optionNumber("exp_over_cap", 10)
+    else
+      percent = optionNumber("exp_rate", 100)
+    end
+    if percent == 100 then return amount end
+    return math.floor(amount * percent / 100)
+  end)
+
+  -- Prize money has no hook.  `Prize.award` reads the reward through the
+  -- module table -- `local quarter = Prize.reward(opts.baseMoney, opts.level)`
+  -- -- and `Prize.reward` is a pure function with exactly that one caller, so
+  -- wrapping it scales the payout and the "got Y1234 for winning" line that
+  -- quotes it, and nothing else.
+  --
+  -- The vanilla function is parked on the table so a reload wraps the
+  -- original rather than stacking a second multiplier on the first wrapper.
+  -- The wrapper reads the options every call, so turning the mod off restores
+  -- vanilla payouts without needing to unwrap.
+  local okPrize, Prize = pcall(require, "src.battle.gen2.Prize")
+  if okPrize and type(Prize) == "table" and type(Prize.reward) == "function" then
+    Prize.levelMatchVanillaReward = Prize.levelMatchVanillaReward or Prize.reward
+    local vanillaReward = Prize.levelMatchVanillaReward
+    Prize.reward = function(baseMoney, level)
+      local amount = vanillaReward(baseMoney, level)
+      if type(amount) ~= "number" then return amount end
+      if not mod.options:get("enabled") then return amount end
+      if not mod.options:get("lean_rewards") then return amount end
+      local percent = optionNumber("money_rate", 50)
+      if percent == 100 then return amount end
+      return math.floor(amount * percent / 100)
+    end
+  else
+    mod.log:warn("prize money left at vanilla: could not reach Prize.reward")
+  end
+
+  mod.log:info("level_match ready -- trainer.party, wild encounters, rewards")
 end

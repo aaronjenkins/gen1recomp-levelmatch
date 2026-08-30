@@ -180,6 +180,58 @@ hook cannot see the `battleTower` flag, so the mod reads
 `save.battleTower.challenge` (`sBattleTowerChallengeState`, `2` while a challenge
 runs) and skips scaling for its duration.
 
+## Rewards, and why they need a cap
+
+Scaling the enemy also scales what beating it pays, and the engine's own
+formulas are the reason:
+
+- experience is `baseExp × the defeated level ÷ 7`
+- prize money is `baseMoney × the level of the LAST mon on the roster`
+  (`Prize.reward`, `Prize.rewardLevel`) — the roster's *size* is not in it, so
+  a six-mon trainer pays exactly what a two-mon one pays
+
+Both terms are the level this mod just raised. Measured against the real Crystal
+dataset:
+
+```
+                             vanilla        with scaling      money   exp
+BUG_CATCHER   8 badges   2 mons L3  ¥12    2 mons L31 ¥124    x10.3   x32.2
+FISHER        6 badges   4 mons L5  ¥50    4 mons L19 ¥190    x3.8    x11.0
+COOLTRAINERM 12 badges   3 mons L26 ¥312   3 mons L43 ¥516    x1.7    x5.3
+WHITNEY (gym) 3 badges   2 mons L20 ¥500   6 mons L21 ¥525    x1.1    x2.6
+```
+
+**That inflation makes the game easier, not harder.** Enemies follow the badge
+count and nothing follows the player, so experience that outruns the curve buys
+a party the curve can no longer threaten — and a Lv31 Bug Catcher paying 32× is
+a very fast way to outrun it.
+
+`lean_rewards` puts the player on a curve too. It is **off by default**: it
+changes how a whole run paces, and it is not what earlier versions did.
+
+**A soft level cap, not a flat tax.** Below the cap a mon earns at the full
+(inflated) rate, so climbing back up after a badge is quick. At or above it the
+mon keeps only `exp_over_cap` — 10% by default, so a capped party creeps rather
+than freezing. The cap is one of the mod's own curves, read live from the badge
+count: `boss` by default, which is the level of the gym leader your badge count
+says you can face, so a capped party meets a leader level for level.
+
+The cap is per **mon**, because `exp.gain` fires once per recipient per KO. A
+fresh Lv5 catch still earns at full rate while the rest of a capped team creeps.
+
+**Prize money has no hook.** `Prize.award` reads its reward through the module
+table — `local quarter = Prize.reward(opts.baseMoney, opts.level)` — and
+`Prize.reward` is a pure function with exactly that one caller, so the mod wraps
+it behind `engine_internals`. That scales the payout and the "got ¥1234 for
+winning" line that quotes it, and nothing else. The vanilla function is parked on
+the table, so reloading the mod wraps the original rather than stacking a second
+multiplier; the wrapper reads the options on every call, so switching the mod off
+restores vanilla payouts without unwrapping anything.
+
+**The Battle Tower is exempt here too**, for the reason it is exempt from
+scaling: it is a level-normalised format the curve never touched, so starving its
+experience would tax a mode this mod does not otherwise affect.
+
 ## Options
 
 | Key | Default | Meaning |
@@ -208,6 +260,11 @@ runs) and skips scaling for its duration.
 | `wild_base` | 5 | wild level at 0 badges |
 | `wild_per_badge` | 30 | tenths of a level per badge (3.0) |
 | `scale_roamers` | on | scale Raikou/Entei/Suicune (writes to the save) |
+| `lean_rewards` | **off** | master switch for the experience cap and money cut |
+| `exp_cap_tier` | boss | which curve caps the player: `boss`, `gym`, `overworld`, `off` |
+| `exp_over_cap` | 10 | % of experience a mon at or above the cap still earns |
+| `exp_rate` | 100 | % of experience below the cap |
+| `money_rate` | 50 | % of prize money |
 | `debug_badges` | -1 | pretend this many badges; -1 reads the save |
 
 `debug_badges` exists because a fresh file has zero badges, where the curve is
@@ -237,9 +294,36 @@ dataset:
  8 badges  roaming RAIKOU     L40     -> L40        (raise-only floor is below it)
 ```
 
-The mod declares the `engine_internals` permission: since 0.3.3 it reads
-`src.battle.gen2.Mon` to keep a scaled mon's `experience` consistent with its
-new level. That is an engine module, not another mod.
+With `lean_rewards` on at its defaults, and a party sitting exactly at the cap:
+
+```
+                              vanilla        scaled          lean
+BUG_CATCHER    8 badges  cap L43   ¥12  66     ¥124  2124    ¥62   212
+FISHER         6 badges  cap L34   ¥50  126    ¥190  1389    ¥95   138
+COOLTRAINERM  12 badges  cap L61   ¥312 1083   ¥516  5774    ¥258  576
+WHITNEY (gym)  3 badges  cap L21   ¥500 1117   ¥525  2910    ¥262  289
+CLAIR (gym)    8 badges  cap L43   ¥1000 5196  ¥1000 8705    ¥500  868
+BLUE (gym)    15 badges  cap L75   ¥1450 14602 ¥1875 18975   ¥937  1894
+```
+
+and the cap itself, driven one award at a time at 8 badges (boss cap L43):
+
+```
+lean off              mon L40 vs a L31 BUTTERFREE  -> 1062
+lean on   cap L43     mon L20 -> 1062   mon L42 -> 1062   (under the cap, full rate)
+lean on   cap L43     mon L43 -> 106    mon L60 -> 106    (at or over it, 10%)
+exp_rate 50           mon L20 -> 531
+exp_over_cap 0        mon L60 -> 0
+exp_cap_tier off      mon L60 -> 1062                     (uncapped again)
+wild battles          mon L60 -> 70     mon L20 -> 708    (the cap covers wilds)
+Prize.reward(25, 40)  1000 vanilla -> 500 at 50% -> 250 at 25% -> 1000 with the mod off
+Battle Tower          mon L60 -> 1062                     (uncut mid-challenge)
+```
+
+The mod declares the `engine_internals` permission for two engine modules, not
+other mods: since 0.3.3 it reads `src.battle.gen2.Mon` to keep a scaled mon's
+`experience` consistent with its new level, and since 0.9.0 it wraps
+`src.battle.gen2.Prize`'s `reward` to cut prize money, which has no hook.
 
 ## Known gaps
 
@@ -272,6 +356,9 @@ new level. That is an engine module, not another mod.
   roamers there is no dedicated event for them, but `script.command` sees every
   `loadwildmon` row and is the obvious seam. CC scales these as
   `Lv5 + 5 × badges` capped at 50.
+- **Pay Day is untouched.** It pays `2 × the user's level` on a separate path
+  (`Prize.payDay`), and its level is the player's, which the cap already holds
+  down.
 - **Gen 1 is not targeted.** The manifest declares `gen2`, which the engine
   expands to gold/silver/crystal.
 
@@ -299,15 +386,21 @@ inside the running engine through `POKEPORT_DRIVER`: the hook fires with real
 trainer class ids, levels land on the documented endpoints, HP refills to the new
 maximum instead of keeping the pre-scaling value, Battle Tower opponents stay
 untouched mid-challenge, sidequest classes freeze only when `exempt_sidequest` is
-on, and grass, cave and fishing rolls all scale. Each
-published zip is checked against the importer's archive rules.
+on, and grass, cave and fishing rolls all scale. The reward cap was driven the
+same way, one award at a time: the boundary lands where the curve says it does
+(full rate at Lv42, cut at Lv43 on a Lv43 cap), the money wrapper scales the
+payout and restores vanilla when the mod is switched off, and neither touches a
+Battle Tower challenge. Each published zip is checked against the importer's
+archive rules.
 
 **Played once, not played through.** A scaled gym battle has been fought in the
 real game and ran correctly — the padded team, the rebuilt movesets and the
 levels all behaved, and it was genuinely harder. That is one battle, not a run:
 there is still no full playthrough and no balance testing across one, so the
-curve past the mid-game is still a projection. Treat the defaults as a starting
-point, and back up your saves before installing.
+curve past the mid-game is still a projection. `lean_rewards` in particular has
+been measured but never played: the numbers above say what it pays, not whether
+a run under it is paced well. Treat the defaults as a starting point, and back
+up your saves before installing.
 
 ## License
 
