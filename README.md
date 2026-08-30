@@ -41,6 +41,7 @@ depends on no other mod.
 |---|---|---|
 | Gyms, E4, champion, rivals | ~Lv7 at 0 badges to ~Lv75 at 15 | CC docs, "Scaling Gyms" |
 | Red | his own curve, ~Lv85 at 16 badges | see below |
+| Gym trainers | their own curve, between the leader and the routes | CC docs, "Overworld Trainers" |
 | Overworld trainers | scale too, "but not as harshly" | CC docs, "Overworld Trainers" |
 | Sidequest trainers (`SAGE`, `MYSTICALMAN`) | scale by default; `exempt_sidequest` restores CC's freeze | CC names Sprout Tower, Eusine |
 | Wild encounters | scale — **a departure from CC** | below |
@@ -67,9 +68,31 @@ scaling down if you somehow reach Mt. Silver early. Nothing else comes close to
 the ceiling: the next highest boss tops out at Lv58, and the Elite Four have no
 rematch rosters in vanilla, so this tier is Red alone.
 
+**Gym trainers are their own tier.** CC's line is that trainers *outside* gyms
+scale "but not as harshly as Gym trainers do", which makes the staff inside a
+gym a tier of their own rather than route fodder. They sit between the leader
+(4.5 a badge) and the routes (3.0) at 4.0.
+
+Gym membership is read from the map data, not from class names, because the two
+overlap: `LASS` members 1 and 2 stand in Goldenrod Gym, member 9 in Celadon, and
+the other fourteen are scattered across the world. A sight trainer is an object
+carrying `trainer = { class, member }`; the leader is an object whose script
+holds a `loadtrainer` row.
+
+```
+at 2 badges   Whitney (leader)          ace L16
+              LASS m1, Goldenrod Gym    L15
+              LASS m4, not a gym        L13
+```
+
 **Levels.** Rather than assigning every mon the target level — which flattens a
 team into a mono-level wall — the mod anchors the *strongest* mon to the curve and
 shifts the rest by the same delta, preserving the authored spread.
+
+That alone punishes a wide authored ramp: the Goldenrod Beauty's Sentrets are
+L9/L13/L17, so anchoring her ace dragged the tail to L5. `spread_cap` puts a
+floor under it, six levels below the team's target by default, which turns that
+into L9/L11/L15.
 
 **Movesets.** A mon dragged to Lv75 still knowing its Lv7 moves is the biggest
 reason scaled bosses stay easy. Every scaled mon is rebuilt to what its species
@@ -166,12 +189,15 @@ runs) and skips scaling for its duration.
 | `boss_per_badge` | 45 | tenths of a level per badge (4.5) |
 | `postgame_base` | 21 | Red's level at 0 badges |
 | `postgame_per_badge` | 40 | tenths of a level per badge (4.0) |
+| `gym_base` | 7 | gym trainer level at 0 badges |
+| `gym_per_badge` | 40 | tenths of a level per badge (4.0) |
 | `overworld_base` | 7 | overworld level at 0 badges |
 | `overworld_per_badge` | 30 | tenths of a level per badge (3.0) |
 | `scale_overworld` | on | scale route trainers (off = bosses only) |
 | `exempt_sidequest` | **off** | freeze the sidequest classes, as CC does |
 | `scale_movesets` | on | rebuild movesets for the new level |
 | `boss_best_moves` | on | bosses also draw from their TM pool |
+| `spread_cap` | 6 | no mon lands more than this far below its team's ace |
 | `evolve_scaled` | on | evolve scaled mons to the form their level allows |
 | `boss_stone_evos` | on | leaders also take stone and trade evolutions |
 | `stone_evo_level` | 30 | the level from which a stone or trade is assumed |

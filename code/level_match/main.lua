@@ -70,6 +70,13 @@ return function(mod)
     -- the hardest thing in the game once every other tier has scaled up too.
     { key = "postgame_per_badge", type = "number", label = "RED LV/BADGE x10",
       default = 40, min = 0, max = 99 },
+    -- Crystal Clear says trainers OUTSIDE gyms scale "but not as harshly as
+    -- Gym trainers do", which makes gym trainers their own tier rather than
+    -- ordinary route fodder. They sit between the leader and the routes.
+    { key = "gym_base", type = "number", label = "GYM TRNR BASE LV",
+      default = 7, min = 2, max = 50 },
+    { key = "gym_per_badge", type = "number", label = "GYM TRNR LV/BADGE x10",
+      default = 40, min = 0, max = 99 },
     { key = "overworld_base", type = "number", label = "TRAINER BASE LV",
       default = 7, min = 2, max = 50 },
     { key = "overworld_per_badge", type = "number", label = "TRNR LV/BADGE x10",
@@ -89,6 +96,11 @@ return function(mod)
     -- strongest attacks they could actually learn.
     { key = "boss_best_moves", type = "toggle", label = "BOSS TM MOVES",
       default = true },
+    -- Anchoring the ACE to the curve shifts the whole team by one delta, which
+    -- on an authored ramp (Sentret L9/L13/L17) drags the tail far below it.
+    -- No mon ends up more than this many levels under the team's target.
+    { key = "spread_cap", type = "number", label = "MAX LV BELOW ACE",
+      default = 6, min = 0, max = 40 },
     { key = "evolve_scaled", type = "toggle", label = "EVOLVE SCALED MONS",
       default = true },
     -- Bosses also get the evolutions that carry no level of their own -- stones
@@ -163,8 +175,56 @@ return function(mod)
       and tonumber(tower.challenge) == TOWER_CHALLENGE_IN_PROGRESS
   end
 
+  -- Which (class, member) pairs stand inside a gym. Read from the map data
+  -- rather than from class names, because gym trainers share classes with
+  -- route trainers -- the Lass in Goldenrod Gym and the Lass on Route 34 are
+  -- both LASS, and only one of them is a gym trainer.
+  --
+  --   * a sight trainer is an object carrying `trainer = { class, member }`
+  --   * the leader is an object whose script holds a `loadtrainer` row
+  local gymsAnalysed, gymMember, classIndexOf = false, {}, {}
+
+  local function analyseGyms(data)
+    local trainers = data and data.trainers
+    local maps = data and data.gen2Maps
+    local scripts = data and data.gen2Scripts
+    if not (trainers and trainers.classes and maps and scripts) then return false end
+    for name, class in pairs(trainers.classes) do
+      if type(class) == "table" and class.index then
+        classIndexOf[name] = class.index
+      end
+    end
+    for mapId, map in pairs(maps) do
+      if type(mapId) == "string" and type(map) == "table"
+          and mapId:find("_GYM", 1, true)
+          and not mapId:find("SPEECH_HOUSE", 1, true) then
+        for _, obj in ipairs(map.objects or {}) do
+          local t = obj.trainer
+          if type(t) == "table" and t.class and t.member then
+            gymMember[t.class .. ":" .. t.member] = true
+          end
+          local list = obj.scriptKey and scripts[obj.scriptKey]
+          for _, row in ipairs(list or {}) do
+            if row.op == "loadtrainer" and row.class and row.member then
+              gymMember[row.class .. ":" .. row.member] = true
+            end
+          end
+        end
+      end
+    end
+    gymsAnalysed = true
+    return true
+  end
+
+  local function inGym(classId, memberId)
+    local index = type(classId) == "string" and classIndexOf[classId]
+      or tonumber(classId)
+    if not index then return false end
+    return gymMember[index .. ":" .. (tonumber(memberId) or 1)] == true
+  end
+
   -- nil means "never scale this trainer".
-  local function tierFor(classId)
+  local function tierFor(classId, memberId)
     if type(classId) ~= "string" then return "overworld" end
     local id = classId:upper()
     if EXEMPT_CLASSES[id] and mod.options:get("exempt_sidequest") then
@@ -172,6 +232,8 @@ return function(mod)
     end
     if POSTGAME_CLASSES[id] then return "postgame" end
     if BOSS_CLASSES[id] then return "boss" end
+    -- a leader is already a boss above; what is left inside a gym is its staff
+    if inGym(classId, memberId) then return "gym" end
     return "overworld"
   end
 
@@ -183,6 +245,9 @@ return function(mod)
     elseif tier == "boss" then
       base = optionNumber("boss_base", 7)
       perTenths = optionNumber("boss_per_badge", 45)
+    elseif tier == "gym" then
+      base = optionNumber("gym_base", 7)
+      perTenths = optionNumber("gym_per_badge", 40)
     else
       base = optionNumber("overworld_base", 7)
       perTenths = optionNumber("overworld_per_badge", 30)
@@ -424,7 +489,11 @@ return function(mod)
     for _, mon in ipairs(party) do
       top = math.max(top, tonumber(mon.level) or 1)
     end
-    local delta = targetLevel(tier, badges) - top
+    local target = targetLevel(tier, badges)
+    local delta = target - top
+    -- the floor the tail is not allowed to sink below
+    local cap = optionNumber("spread_cap", 6)
+    local floorLevel = math.max(1, math.min(target, target - math.max(0, cap)))
 
     local out = {}
     for i = 1, size do out[i] = party[i] end
@@ -438,7 +507,9 @@ return function(mod)
     end
 
     for _, mon in ipairs(out) do
-      mon.level = math.max(1, math.min(MAX_LEVEL, (tonumber(mon.level) or 1) + delta))
+      local shifted = (tonumber(mon.level) or 1) + delta
+      if shifted < floorLevel then shifted = floorLevel end
+      mon.level = math.max(1, math.min(MAX_LEVEL, shifted))
       -- Before experience and moves: growth rate, the learnset and the TM pool
       -- all belong to the species, so the evolution has to land first.
       -- Mon.refreshStats calls syncIdentity, which repairs name, types, gender
@@ -469,7 +540,17 @@ return function(mod)
     if type(composed) ~= "table" or #composed == 0 then return composed end
     if inTowerChallenge() then return composed end
 
-    local tier = tierFor(classId)
+    -- the gym walk has to happen before the first tier lookup, and retries
+    -- until it succeeds rather than latching on a failed attempt
+    if not gymsAnalysed then
+      local okGym, errGym = pcall(analyseGyms, mod.game and mod.game.data)
+      if not okGym then
+        gymsAnalysed = true
+        mod.log:error("could not map the gyms: %s", tostring(errGym))
+      end
+    end
+
+    local tier = tierFor(classId, _memberId)
     if not tier then return composed end
     if tier == "overworld" and not mod.options:get("scale_overworld") then
       return composed
