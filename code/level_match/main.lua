@@ -214,6 +214,8 @@ return function(mod)
   --   * a sight trainer is an object carrying `trainer = { class, member }`
   --   * the leader is an object whose script holds a `loadtrainer` row
   local gymsAnalysed, gymMember, classIndexOf = false, {}, {}
+  -- classIndex -> { memberConstant -> roster index }
+  local memberIndexOf = {}
 
   local function analyseGyms(data)
     local trainers = data and data.trainers
@@ -223,6 +225,16 @@ return function(mod)
     for name, class in pairs(trainers.classes) do
       if type(class) == "table" and class.index then
         classIndexOf[name] = class.index
+        -- The hook is handed the member CONSTANT (CARRIE), never the index:
+        -- Battle.lua sends `trainer.memberId`, which Trainers.lookup fills
+        -- from the roster row's `id`. Map objects store the numeric index, so
+        -- the two have to be reconciled. `id` is unique inside a class -- the
+        -- cart disambiguates its own repeats (CONNIE1, CONNIE2, CONNIE3).
+        local byId = {}
+        for i, row in ipairs(class.trainers or {}) do
+          if type(row) == "table" and row.id then byId[row.id] = i end
+        end
+        memberIndexOf[class.index] = byId
       end
     end
     for mapId, map in pairs(maps) do
@@ -251,7 +263,18 @@ return function(mod)
     local index = type(classId) == "string" and classIndexOf[classId]
       or tonumber(classId)
     if not index then return false end
-    return gymMember[index .. ":" .. (tonumber(memberId) or 1)] == true
+    -- A numeric member (Gen 1's shape, and the engine's own `or 1` fallback)
+    -- is already an index; a constant resolves through the class roster.
+    -- An unresolvable member is NOT a gym trainer: the old `or 1` fallback
+    -- made every Lass in the game answer for the one standing in Goldenrod
+    -- Gym, so route trainers took the harsher gym curve.
+    local member = tonumber(memberId)
+    if not member and type(memberId) == "string" then
+      local byId = memberIndexOf[index]
+      member = byId and byId[memberId] or nil
+    end
+    if not member then return false end
+    return gymMember[index .. ":" .. member] == true
   end
 
   -- nil means "never scale this trainer".

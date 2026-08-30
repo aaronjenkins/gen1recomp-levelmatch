@@ -79,6 +79,18 @@ the other fourteen are scattered across the world. A sight trainer is an object
 carrying `trainer = { class, member }`; the leader is an object whose script
 holds a `loadtrainer` row.
 
+**The two sides spell "member" differently, which is what 0.9.1 fixes.** Map
+objects store the numeric roster index, but the hook is handed the member
+*constant*: `Battle.lua` passes `trainer.memberId`, which `Trainers.lookup`
+fills from the roster row's `id` — `CARRIE`, not `1`. Before 0.9.1 the mod read
+that with `tonumber(memberId) or 1`, so **every** trainer of a gym class fell
+back to member 1 and answered for whoever stood in the gym. Route Lasses took
+the harsher gym curve; Krise on Route 32 was scaled as though she worked for
+Whitney. The constant is now resolved through the class roster, and a member
+that does not resolve is not a gym trainer. `id` is unique inside a class — the
+cart disambiguates its own repeats (`CONNIE1`, `CONNIE2`, `CONNIE3`), verified
+across all 67 classes and 542 rows — so the mapping is unambiguous.
+
 ```
 at 2 badges   Whitney (leader)          ace L16
               LASS m1, Goldenrod Gym    L15
@@ -282,6 +294,8 @@ dataset:
  8 badges  RED                L81 ace -> L53 ace    (scales down if reached early)
  0 badges  WHITNEY            L18/L20 -> L5/L7      (scaled DOWN — fight her first)
 15 badges  YOUNGSTER          L4      -> L52        (softer overworld curve)
+ 3 badges  LASS CARRIE        L18     -> L19        (Goldenrod Gym: gym curve)
+ 3 badges  LASS KRISE         L12/L15 -> L13/L16    (Route 32: overworld curve, not the gym one)
 10 badges  SAGE CHOW          L3 x3   -> L37 x3     (Sprout Tower)
 10 badges  SAGE KOJI          L32/L32 -> L37/L37    (Tin Tower)
  any       SAGE, exempt on    L3 x3   -> unchanged
