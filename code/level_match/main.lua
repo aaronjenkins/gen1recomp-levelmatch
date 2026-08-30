@@ -22,6 +22,12 @@
 local MAX_LEVEL = 100
 local MAX_BADGES = 16
 
+-- MakeTrainerPartyMon fixes trainer DVs at 9/8/8/8, which is why a trainer's
+-- Rattata is always the same Rattata (src/world/gen2/Trainers.lua).  A mon
+-- this mod builds has to match, or a filled slot would roll differently from
+-- an authored one.
+local TRAINER_DVS = { attack = 9, defense = 8, speed = 8, special = 8 }
+
 -- Bosses take the hard curve: the 16 gym leaders, the Elite Four and champion,
 -- both rivals, and Red.  These are the pokecrystal class constants the dataset
 -- keys on (data/generated/trainers.lua, `classes`).
@@ -112,6 +118,26 @@ return function(mod)
     -- it Whitney keeps a Clefairy, which is what a 0-badge Whitney should have.
     { key = "stone_evo_level", type = "number", label = "STONE EVO FROM LV",
       default = 30, min = 2, max = 100 },
+    -- Gym rosters are the thin ones: Falkner fields two, Whitney two, and the
+    -- trainers standing around them often one.  Of the 63 trainers across
+    -- every gym, exactly one -- Blue, in Viridian -- already fields six.
+    -- Leading a gym is a job, so a leader fields a full team at any badge
+    -- count; the badge ramp below is for the bosses who are not gym staff.
+    { key = "fill_gym_teams", type = "toggle", label = "FULL GYM TEAMS",
+      default = true },
+    { key = "gym_team_size", type = "number", label = "GYM TEAM SIZE",
+      default = 6, min = 1, max = 6 },
+    -- Off: only the leaders fill, and the gym's other trainers keep their
+    -- authored rosters.
+    { key = "fill_gym_trainers", type = "toggle", label = "FILL GYM TRAINERS",
+      default = true },
+    -- A thin pool widens to the gym's second type.  Ghost is only four species
+    -- across every trainer in the game, which cannot fill one gym, let alone
+    -- Ecruteak's five trainers.
+    { key = "widen_thin_pools", type = "toggle", label = "WIDEN THIN POOLS",
+      default = true },
+    -- The badge ramp for bosses who are NOT gym staff: the Elite Four, the
+    -- champion, both rivals and Red.
     { key = "pad_boss_teams", type = "toggle", label = "PAD BOSS TEAMS",
       default = true },
     { key = "boss_full_team", type = "number", label = "BOSS TEAM AT 16",
@@ -216,6 +242,131 @@ return function(mod)
   local gymsAnalysed, gymMember, classIndexOf = false, {}, {}
   -- classIndex -> { memberConstant -> roster index }
   local memberIndexOf = {}
+  -- "classIndex:member" -> { pool = {species...}, sight = bool }
+  local gymOf = {}
+  -- how often the game gives each species to a trainer, anywhere
+  local speciesUse = nil
+  -- how many species carry each type, across the whole dex.  A type that is
+  -- everywhere (NORMAL, FLYING) says less about a team than a rare one.
+  local typeUse = nil
+
+  local function isGymMap(id)
+    if type(id) ~= "string" then return false end
+    if id:find("SPEECH_HOUSE", 1, true) then return false end
+    return id:find("_GYM", 1, true) ~= nil
+  end
+
+  -- How often each species appears on a trainer anywhere in the game.  Used
+  -- both to BOUND a pool -- nothing the game never fields -- and to ORDER it.
+  --
+  -- The ordering is the whole trick.  Sorted alphabetically, Violet Gym drew
+  -- Aerodactyl and Charizard, because a type pool contains every one-off
+  -- carried by an end-game trainer.  How often the game itself hands a species
+  -- to a trainer is a good proxy for how ordinary it is: Flying by frequency
+  -- opens Golbat, Zubat, Pidgey and Butterfree, and Charizard never surfaces.
+  local function trainerSpecies(trainers)
+    local count = {}
+    for _, class in pairs(trainers.classes or {}) do
+      for _, row in ipairs((type(class) == "table" and class.trainers) or {}) do
+        for _, mon in ipairs(row.party or {}) do
+          if mon.species then count[mon.species] = (count[mon.species] or 0) + 1 end
+        end
+      end
+    end
+    return count
+  end
+
+  local function rosterOf(trainers, className, member)
+    local class = trainers.classes and trainers.classes[className]
+    local row = class and class.trainers and class.trainers[member]
+    return (row and row.party) or {}
+  end
+
+  -- A roster's theme, taken from the roster itself.
+  --
+  -- Requiring the type EVERY mon shares is too strict outside a gym: Bruno
+  -- carries an Onix among four fighters and Karen a Vileplume among three
+  -- dark types, and a strict intersection calls both of them themeless.  A
+  -- type qualifies here by covering at least half the roster.
+  --
+  -- Among the types that qualify, the RAREST across the dex wins, because
+  -- coverage alone picks the wrong one twice over: NORMAL is on so much of
+  -- the dex that it would theme half the game, and every one of Lance's six
+  -- is part FLYING while only half are DRAGON.  Rarity is what "characteristic
+  -- of this team" actually means.
+  --
+  -- nil means the roster has no theme -- a rival's mixed six -- and padding
+  -- falls back to cloning rather than inventing one.
+  local function typesOf(pokemon, roster)
+    if not roster or #roster == 0 then return nil, nil end
+    local count = {}
+    for _, mon in ipairs(roster) do
+      local def = pokemon[mon.species]
+      local seen = {}
+      for _, t in ipairs((def and def.types) or {}) do
+        if not seen[t] then
+          seen[t] = true
+          count[t] = (count[t] or 0) + 1
+        end
+      end
+    end
+    local need = math.ceil(#roster / 2)
+    local ranked = {}
+    for t, c in pairs(count) do
+      if c >= need then ranked[#ranked + 1] = t end
+    end
+    if #ranked == 0 then return nil, nil end
+    local function rarest(a, b)
+      local ua, ub = (typeUse and typeUse[a]) or 0, (typeUse and typeUse[b]) or 0
+      if ua ~= ub then return ua < ub end
+      return a < b
+    end
+    table.sort(ranked, rarest)
+    local primary, secondary = ranked[1], ranked[2]
+    -- A mono-type roster leaves nothing to widen into, and some pools cannot
+    -- fill a team alone: every Dragon in the game evolves into Dragonite, so
+    -- Clair's pool has one usable form in it.  Fall back to the commonest type
+    -- that did NOT reach half the roster -- Kingdra's WATER, in her case.
+    if not secondary then
+      local best = nil
+      for t, c in pairs(count) do
+        if t ~= primary and (not best or c > count[best]
+            or (c == count[best] and rarest(t, best))) then
+          best = t
+        end
+      end
+      secondary = best
+    end
+    return primary, secondary
+  end
+
+  local function poolFor(pokemon, usable, primary, secondary)
+    local out, seen = {}, {}
+    local function add(want)
+      if not want then return end
+      local names = {}
+      for species in pairs(usable) do names[#names + 1] = species end
+      -- commonest first, alphabetical to break ties: deterministic, so the
+      -- same trainer always fields the same team
+      table.sort(names, function(a, b)
+        local ca, cb = usable[a] or 0, usable[b] or 0
+        if ca ~= cb then return ca > cb end
+        return a < b
+      end)
+      for _, species in ipairs(names) do
+        local def = pokemon[species]
+        for _, t in ipairs((def and def.types) or {}) do
+          if t == want and not seen[species] then
+            seen[species] = true
+            out[#out + 1] = species
+          end
+        end
+      end
+    end
+    add(primary)
+    if secondary and mod.options:get("widen_thin_pools") then add(secondary) end
+    return out
+  end
 
   local function analyseGyms(data)
     local trainers = data and data.trainers
@@ -237,26 +388,72 @@ return function(mod)
         memberIndexOf[class.index] = byId
       end
     end
+    local pokemon = data and data.pokemon
+    local nameOfIndex = {}
+    for name, class in pairs(trainers.classes) do
+      if type(class) == "table" and class.index then
+        nameOfIndex[class.index] = name
+      end
+    end
+    speciesUse = trainerSpecies(trainers)
+    typeUse = {}
+    for _, def in pairs(pokemon or {}) do
+      for _, t in ipairs((type(def) == "table" and def.types) or {}) do
+        typeUse[t] = (typeUse[t] or 0) + 1
+      end
+    end
+
     for mapId, map in pairs(maps) do
-      if type(mapId) == "string" and type(map) == "table"
-          and mapId:find("_GYM", 1, true)
-          and not mapId:find("SPEECH_HOUSE", 1, true) then
+      if isGymMap(mapId) and type(map) == "table" then
+        -- Two kinds of gym occupant: a sight trainer carries
+        -- `trainer = { class, member }`, and the leader is an object whose
+        -- script holds a `loadtrainer` row.  Both are read from the map so
+        -- the roster follows the ROM rather than a list that drifts -- LASS
+        -- members 1 and 2 stand in Goldenrod Gym, member 9 in Celadon, and
+        -- the other fourteen are scattered across the world.
+        local members, leader = {}, nil
         for _, obj in ipairs(map.objects or {}) do
           local t = obj.trainer
           if type(t) == "table" and t.class and t.member then
             gymMember[t.class .. ":" .. t.member] = true
+            members[#members + 1] = { class = t.class, member = t.member,
+                                      sight = true }
           end
           local list = obj.scriptKey and scripts[obj.scriptKey]
           for _, row in ipairs(list or {}) do
             if row.op == "loadtrainer" and row.class and row.member then
               gymMember[row.class .. ":" .. row.member] = true
+              local entry = { class = row.class, member = row.member }
+              members[#members + 1] = entry
+              leader = leader or entry
             end
+          end
+        end
+        -- The gym's type comes from the LEADER's own team, so every trainer
+        -- in the gym draws from one on-theme pool.
+        if leader and pokemon then
+          local leaderName = nameOfIndex[leader.class]
+          local roster = leaderName
+            and rosterOf(trainers, leaderName, leader.member) or {}
+          local primary, secondary = typesOf(pokemon, roster)
+          local pool = poolFor(pokemon, speciesUse, primary, secondary)
+          for _, m in ipairs(members) do
+            gymOf[m.class .. ":" .. m.member] = { pool = pool, sight = m.sight }
           end
         end
       end
     end
     gymsAnalysed = true
     return true
+  end
+
+  -- The numeric roster index behind whatever the hook was handed.
+  local function memberIndex(classIndex, memberId)
+    local member = tonumber(memberId)
+    if member then return member end
+    if type(memberId) ~= "string" then return nil end
+    local byId = memberIndexOf[classIndex]
+    return byId and byId[memberId] or nil
   end
 
   local function inGym(classId, memberId)
@@ -268,13 +465,19 @@ return function(mod)
     -- An unresolvable member is NOT a gym trainer: the old `or 1` fallback
     -- made every Lass in the game answer for the one standing in Goldenrod
     -- Gym, so route trainers took the harsher gym curve.
-    local member = tonumber(memberId)
-    if not member and type(memberId) == "string" then
-      local byId = memberIndexOf[index]
-      member = byId and byId[memberId] or nil
-    end
+    local member = memberIndex(index, memberId)
     if not member then return false end
     return gymMember[index .. ":" .. member] == true
+  end
+
+  -- The gym record for a trainer, or nil when they do not stand in one.
+  local function gymEntry(classId, memberId)
+    local index = type(classId) == "string" and classIndexOf[classId]
+      or tonumber(classId)
+    if not index then return nil end
+    local member = memberIndex(index, memberId)
+    if not member then return nil end
+    return gymOf[index .. ":" .. member]
   end
 
   -- nil means "never scale this trainer".
@@ -331,7 +534,18 @@ return function(mod)
   -- Vanilla bosses carry authored teams as small as two (Falkner), which stay
   -- a pushover at Lv75 no matter the level.  Grow linearly from the authored
   -- size at 0 badges to a full team at 16.
-  local function targetSize(tier, originalSize, badges)
+  local function targetSize(tier, originalSize, badges, gym)
+    -- Standing in a gym is a job, not a badge reward: a leader fields a full
+    -- team the day you walk in, whether that is your first badge or your
+    -- fifteenth.  The badge ramp below is for the bosses who are not gym
+    -- staff -- the Elite Four, the champion, both rivals and Red.
+    if gym and mod.options:get("fill_gym_teams") then
+      if gym.sight and not mod.options:get("fill_gym_trainers") then
+        return originalSize
+      end
+      return math.max(originalSize,
+        math.min(6, math.max(1, optionNumber("gym_team_size", 6))))
+    end
     if not (tier == "boss" or tier == "postgame")
         or not mod.options:get("pad_boss_teams") then
       return originalSize
@@ -539,7 +753,7 @@ return function(mod)
     return out
   end
 
-  local function rescale(party, tier, badges, data)
+  local function rescale(party, tier, badges, data, gym)
     local size = #party
     if size == 0 then return party end
 
@@ -560,12 +774,82 @@ return function(mod)
     local out = {}
     for i = 1, size do out[i] = party[i] end
 
-    -- Pad before levelling so the clones take the same shift.  Copies cycle
-    -- through the authored roster, which keeps the padding on-type for that
-    -- trainer without inventing species its author never picked.
-    local want = targetSize(tier, size, badges)
-    for i = size + 1, want do
-      out[i] = deepCopy(party[((i - 1) % size) + 1])
+    -- Pad before levelling, so the new mons take the same shift and the same
+    -- evolutions as the authored ones.
+    --
+    -- The species come from a TYPE POOL, not from cloning.  Cloning is what
+    -- turned a scaled Morty into six identical Gengar: evolution collapses an
+    -- evolutionary line, so a roster that varied only by stage ends up
+    -- uniform.  The pool is drawn only from species the game actually gives
+    -- to some trainer, ordered by how often it does, so nothing is invented
+    -- and nothing is off-theme.
+    --
+    -- Cloning survives as the FALLBACK, for a roster that shares no type at
+    -- all -- a rival's team does not, and inventing a theme for it would be
+    -- worse than a repeat.
+    local want = targetSize(tier, size, badges, gym)
+    if want > size then
+      local pokemon = data and data.pokemon
+      local pool = gym and gym.pool
+      if (not pool or #pool == 0) and pokemon and speciesUse then
+        local primary, secondary = typesOf(pokemon, party)
+        if primary then
+          pool = poolFor(pokemon, speciesUse, primary, secondary)
+        end
+      end
+      local Mon = engineMon()
+      local canBuild = pool and #pool > 0 and Mon and Mon.new and data
+
+      -- Dedupe on what a mon will BE after the levelling pass, not on what it
+      -- is now.  Clair's authored roster is three Dragonair, which all evolve
+      -- into Dragonite: matching on the pre-evolution name let the pool hand
+      -- her two more Dragonite on top, for five.  The species compared here
+      -- are the ones the player will actually see.
+      local stones = (tier == "boss" or tier == "postgame")
+        and mod.options:get("boss_stone_evos")
+      local function finalForm(species, level)
+        if not (data and mod.options:get("evolve_scaled")) then return species end
+        local shifted = math.max(1, math.min(MAX_LEVEL,
+          math.max((tonumber(level) or 1) + delta, floorLevel)))
+        return evolvedFor(species, shifted, data, stones)
+      end
+
+      local have = {}
+      for _, m in ipairs(out) do
+        have[finalForm(m.species, m.level)] = true
+      end
+      local pick = 1
+      while #out < want do
+        -- levels cycle the authored roster, so the team keeps its own spread
+        local donor = party[(#out % size) + 1]
+        local built = nil
+        if canBuild then
+          local species, form = nil, nil
+          for lap = 1, 2 do
+            for _ = 1, #pool do
+              local candidate = pool[((pick - 1) % #pool) + 1]
+              pick = pick + 1
+              local grown = finalForm(candidate, donor.level or 5)
+              -- the first lap prefers forms not already on the team; the
+              -- second allows repeats, which is all a four-species pool offers
+              if candidate and (lap == 2 or not have[grown]) then
+                species, form = candidate, grown
+                break
+              end
+            end
+            if species then break end
+          end
+          if species then
+            built = Mon.new(data, species, donor.level or 5,
+              { dvs = { attack = TRAINER_DVS.attack,
+                        defense = TRAINER_DVS.defense,
+                        speed = TRAINER_DVS.speed,
+                        special = TRAINER_DVS.special } })
+            if built then have[form] = true end
+          end
+        end
+        out[#out + 1] = built or deepCopy(donor)
+      end
     end
 
     for _, mon in ipairs(out) do
@@ -620,7 +904,8 @@ return function(mod)
 
     local badges = badgeCount()
     local data = mod.game and mod.game.data
-    local ok, result = pcall(rescale, composed, tier, badges, data)
+    local gym = gymEntry(classId, _memberId)
+    local ok, result = pcall(rescale, composed, tier, badges, data, gym)
     if not ok then
       mod.log:error("rescale failed for %s: %s", tostring(classId), tostring(result))
       return composed

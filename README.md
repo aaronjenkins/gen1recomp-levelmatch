@@ -6,6 +6,10 @@ Crystal Clear's open world works because of one rule: every trainer scales to yo
 badge count, so all 16 gyms can be faced in any order. This mod brings that rule
 to vanilla Gold/Silver/Crystal.
 
+Since 0.10.0 it also fills gym rosters to full teams — the former
+`full_enemy_teams` mod, folded in. The two shared their gym-detection code, and
+the same bug had to be fixed in both copies, which is what settled the argument.
+
 Requires engine **0.2.x** (developed against 0.2.26). On 0.1.x the `gen2` target
 expands to Gold only and Crystal is not a known game at all.
 
@@ -192,6 +196,61 @@ hook cannot see the `battleTower` flag, so the mod reads
 `save.battleTower.challenge` (`sBattleTowerChallengeState`, `2` while a challenge
 runs) and skips scaling for its duration.
 
+## Full teams, and where the extra Pokemon come from
+
+Vanilla gym rosters are thin. Falkner has two Pokemon, Whitney two, and the
+trainers standing around them often one. Of the 63 trainers across every gym,
+exactly one — Blue, in Viridian — already fields six. Leading a gym is a job, so
+since 0.10.0 a leader fields a full team at **any** badge count, and so does the
+gym's staff. The badge ramp (`pad_boss_teams`) now applies only to the bosses
+who are not gym staff: the Elite Four, the champion, both rivals and Red.
+
+**Padding is not duplication.** Cloning the authored roster is what turned a
+scaled Morty into six identical Gengar. Instead each roster gets a **species
+pool built from its own type**, drawn only from species that actually appear on
+some trainer somewhere in the game — so nothing is invented and nothing is
+off-theme.
+
+The pool is **ordered by how often the game itself gives a species to a
+trainer**, and that ordering is the whole trick. Sorted alphabetically, Violet
+Gym drew Aerodactyl and Charizard, because a type pool contains every one-off
+carried by an end-game trainer. Frequency is a good proxy for how ordinary a
+species is:
+
+```
+FLYING  Golbat(21) Zubat(21) Gyarados(13) Pidgey(13) Butterfree(12) Skiploom(11)
+STEEL   Magnemite(33) Magneton(15) Steelix(7) Forretress(4) Scizor(4) Skarmory(4)
+GHOST   Haunter(19) Gastly(11) Gengar(10) Misdreavus(2)
+```
+
+Charizard never surfaces. A gym draws from its **leader's** type, so everyone
+inside shares one theme.
+
+**Finding the theme of a roster that is not a gym leader's.** Requiring the type
+every mon shares is too strict outside a gym: Bruno carries an Onix among four
+fighters, Karen a Vileplume among three dark types, and a strict intersection
+calls both themeless. A type qualifies here by covering **at least half** the
+roster. Among the types that qualify, the **rarest across the dex** wins,
+because coverage alone picks wrong twice over — NORMAL is on so much of the dex
+that it would theme half the game, and every one of Lance's six is part FLYING
+while only half are DRAGON. Rarity is what "characteristic of this team"
+actually means. A roster with no qualifying type — a rival's mixed six — has no
+theme, and padding falls back to cloning rather than inventing one.
+
+**Thin pools widen to the second type.** Ghost is only four species across every
+trainer in the game, which cannot fill one gym, let alone Ecruteak's five
+trainers; Morty widens into Poison and picks up Koffing and Golbat. Every Dragon
+in the game evolves into Dragonite, so Clair's pool has one usable form in it
+and widens into Kingdra's Water. `widen_thin_pools` turns that off.
+
+**Duplicates are judged after evolution, not before.** Clair's authored roster
+is three Dragonair, which all become Dragonite; matching on the pre-evolution
+name handed her two more Dragonite on top, for five. The species compared are
+the ones the player will actually see.
+
+**Who counts as a gym trainer** is read from the map data, never from class
+names — see the gym-membership note above.
+
 ## Rewards, and why they need a cap
 
 Scaling the enemy also scales what beating it pays, and the engine's own
@@ -265,8 +324,12 @@ experience would tax a mode this mod does not otherwise affect.
 | `evolve_scaled` | on | evolve scaled mons to the form their level allows |
 | `boss_stone_evos` | on | leaders also take stone and trade evolutions |
 | `stone_evo_level` | 30 | the level from which a stone or trade is assumed |
-| `pad_boss_teams` | on | grow thin boss teams |
-| `boss_full_team` | 6 | boss team size at 16 badges |
+| `fill_gym_teams` | on | gym leaders and staff field a full team at any badge count |
+| `gym_team_size` | 6 | how many that is |
+| `fill_gym_trainers` | on | off fills only the leaders |
+| `widen_thin_pools` | on | a thin pool borrows the roster's second type |
+| `pad_boss_teams` | on | grow thin teams for bosses who are *not* gym staff |
+| `boss_full_team` | 6 | that ramp's target at 16 badges |
 | `scale_wilds` | on | scale wild encounters (off = CC-exact) |
 | `wild_mode` | raise_only | `raise_only` floors levels, `replace` flattens |
 | `wild_base` | 5 | wild level at 0 badges |
@@ -294,8 +357,13 @@ dataset:
  8 badges  RED                L81 ace -> L53 ace    (scales down if reached early)
  0 badges  WHITNEY            L18/L20 -> L5/L7      (scaled DOWN — fight her first)
 15 badges  YOUNGSTER          L4      -> L52        (softer overworld curve)
- 3 badges  LASS CARRIE        L18     -> L19        (Goldenrod Gym: gym curve)
- 3 badges  LASS KRISE         L12/L15 -> L13/L16    (Route 32: overworld curve, not the gym one)
+ 3 badges  LASS CARRIE        1 mon   -> 6 mons     (Goldenrod Gym: gym curve, filled)
+ 3 badges  LASS KRISE         L12/L15 -> L13/L16    (Route 32: overworld curve, unfilled)
+ 3 badges  BEAUTY BRENDA      1 mon   -> 1 mon      (route Beauty of a gym class: untouched)
+15 badges  FALKNER            2 mons  -> PIDGEOT x2, GOLBAT, BUTTERFREE, JUMPLUFF, GYARADOS
+16 badges  BRUNO (E4)         5 mons  -> + POLIWRATH   (badge ramp, own FIGHTING pool)
+16 badges  KAREN (E4)         5 mons  -> + SNEASEL     (DARK: 3 of 5 is enough to be a theme)
+16 badges  RIVAL2             6 mons  -> unchanged     (mixed roster: no theme, no pool)
 10 badges  SAGE CHOW          L3 x3   -> L37 x3     (Sprout Tower)
 10 badges  SAGE KOJI          L32/L32 -> L37/L37    (Tin Tower)
  any       SAGE, exempt on    L3 x3   -> unchanged
@@ -341,27 +409,19 @@ other mods: since 0.3.3 it reads `src.battle.gen2.Mon` to keep a scaled mon's
 
 ## Known gaps
 
-- **Padding repeats species, and evolution makes that worse on some teams.**
-  Evolving collapses an evolutionary line into a single species, so a leader
-  whose roster varied only by *stage* ends up entirely uniform:
+- **A roster that collapses under evolution stays collapsed.** Padding now
+  draws from a type pool, but the *authored* mons still evolve independently,
+  and a line-based roster ends up uniform before padding gets a say:
 
   ```
-  Morty    GASTLY / HAUNTER / GENGAR / HAUNTER  ->  6x GENGAR
-  Falkner  PIDGEY / PIDGEOTTO                   ->  6x PIDGEOT
-  Clair    DRAGONAIR x3 / KINGDRA               ->  5x DRAGONITE + KINGDRA
-  Bugsy    METAPOD / KAKUNA / SCYTHER           ->  BUTTERFREE / BEEDRILL / SCIZOR
+  Morty   GASTLY / HAUNTER / GENGAR / HAUNTER  ->  4x GENGAR + WEEZING, GOLBAT
+  Clair   DRAGONAIR x3 / KINGDRA               ->  3x DRAGONITE + KINGDRA, SEAKING, STARMIE
   ```
 
-  Bugsy stays varied because his three mons are three separate lines. Falkner
-  was three Pidgey and three Pidgeotto before evolution, which at least read as
-  two Pokemon; now it is six of one. So evolution traded "unevolved and wrong"
-  for "evolved and monotonous" on single-line teams, and every clone shares one
-  moveset besides.
-
-  Drawing padding from a type-matched pool of trainer-used species is the fix.
-  The pools are uneven, though, and Morty is the worst case for it as well as
-  for the current behaviour: Ghost has only four species across every trainer in
-  the game (Gastly, Haunter, Gengar, Misdreavus).
+  The two pool fills are correct in both cases; the repeats are the four
+  Gastly-line mons and the three Dragonair Game Freak wrote. Fixing it means
+  holding some authored mons back a stage so a line does not converge, which
+  changes what `evolve_scaled` means rather than what padding does.
 - **Scripted static encounters are not scaled at all.** Sudowoodo, Snorlax, the
   legendary birds, Ho-Oh/Lugia and the Red Gyarados are placed by the
   `loadwildmon` script opcode, which sets the species and level straight from
